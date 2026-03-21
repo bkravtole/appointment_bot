@@ -1,0 +1,217 @@
+{
+  "info": {
+    "name": "WhatsApp Appointment Bot API",
+    "description": "Complete API collection for WhatsApp Appointment Bot",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/health",
+          "host": ["{{base_url}}"],
+          "path": ["health"]
+        }
+      }
+    },
+    {
+      "name": "Webhook - User Says Hi",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"from\": \"+1234567890\",\n  \"text\": {\n    \"body\": \"Hi\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/webhook/user-action",
+          "host": ["{{base_url}}"],
+          "path": ["webhook", "user-action"]
+        }
+      }
+    },
+    {
+      "name": "Webhook - Book Appointment Click",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"from\": \"+1234567890\",\n  \"interactive\": {\n    \"button_reply\": {\n      \"id\": \"book_appointment\"\n    }\n  }\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/webhook/user-action",
+          "host": ["{{base_url}}"],
+          "path": ["webhook", "user-action"]
+        }
+      }
+    },
+    {
+      "name": "Webhook - Select Date",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"from\": \"+1234567890\",\n  \"interactive\": {\n    \"list_reply\": {\n      \"id\": \"date_2026-03-25\"\n    }\n  }\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/webhook/user-action",
+          "host": ["{{base_url}}"],
+          "path": ["webhook", "user-action"]
+        }
+      }
+    },
+    {
+      "name": "Webhook - Select Time Slot",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"from\": \"+1234567890\",\n  \"interactive\": {\n    \"button_reply\": {\n      \"id\": \"slot_10_00\"\n    }\n  }\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/webhook/user-action",
+          "host": ["{{base_url}}"],
+          "path": ["webhook", "user-action"]
+        }
+      }
+    },
+    {
+      "name": "Get Available Slots",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/get-available-slots?date=2026-03-25",
+          "host": ["{{base_url}}"],
+          "path": ["api", "get-available-slots"],
+          "query": [
+            {
+              "key": "date",
+              "value": "2026-03-25"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Confirm Booking",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"phoneNumber\": \"+1234567890\",\n  \"date\": \"2026-03-25\",\n  \"time\": \"10:00\",\n  \"userName\": \"John Doe\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/confirm-booking",
+          "host": ["{{base_url}}"],
+          "path": ["api", "confirm-booking"]
+        }
+      }
+    },
+    {
+      "name": "Doctor Report",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/doctor-report",
+          "host": ["{{base_url}}"],
+          "path": ["api", "doctor-report"]
+        }
+      }
+    },
+    {
+      "name": "Reschedule Appointment",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"phoneNumber\": \"+1234567890\",\n  \"date\": \"2026-03-26\",\n  \"time\": \"14:00\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/reschedule",
+          "host": ["{{base_url}}"],
+          "path": ["api", "reschedule"]
+        }
+      }
+    },
+    {
+      "name": "Cancel Appointment",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"phoneNumber\": \"+1234567890\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/cancel",
+          "host": ["{{base_url}}"],
+          "path": ["api", "cancel"]
+        }
+      }
+    },
+    {
+      "name": "Get Appointment Details",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/appointment/+1234567890",
+          "host": ["{{base_url}}"],
+          "path": ["api", "appointment", "+1234567890"]
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    }
+  ]
+}
