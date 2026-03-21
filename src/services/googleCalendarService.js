@@ -133,12 +133,12 @@ class GoogleCalendarService {
       });
 
       // Format for 11za response (time display in 12-hour format with AM/PM)
-      // Limit response to first 10 slots with unique ID
+      // Limit response to first 10 slots with unique ID and both time formats
       return availableSlots.slice(0, 10).map((slot, index) => ({
         id: `${date}-${slot.startTime}`, // Unique ID: date + time
-        time: this.convertTo12HourFormat(slot.startTime),
-        startDateTime: slot.startDateTime.toISOString(),
-        endDateTime: slot.endDateTime.toISOString(),
+        time12: this.convertTo12HourFormat(slot.startTime), // 12-hour format with AM/PM
+        time24: slot.startTime, // 24-hour format (HH:MM)
+     
       }));
     } catch (error) {
       console.error('Error calculating available slots:', error);
