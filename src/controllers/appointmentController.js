@@ -21,8 +21,9 @@ class AppointmentController {
         success: true,
         date,
         slots: slots.map((slot) => ({
-          id: `${date}-${slot.time}`, // Unique ID for 11za button actions
-          time: slot.time, // Now in 12-hour format with AM/PM
+          id: slot.id, // Unique ID for 11za button actions
+          time: slot.time12,
+          time24 : slot.time24, // Now in 12-hour format with AM/PM
           date: date,
          
         })),
