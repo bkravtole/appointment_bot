@@ -16,6 +16,16 @@ const elevenLabsService = require('../services/elevenLabsService');
  */
 router.post('/user-action', async (req, res) => {
   try {
+    const expectedSecret = process.env.ELEVENLABS_WEBHOOK_SECRET;
+ 
+    if (expectedSecret) {
+      const incomingToken = req.headers['x-api-key'];
+ 
+      if (incomingToken !== expectedSecret) {
+        console.error('❌ UNAUTHORIZED: Invalid Webhook Request. Headers mismatch.');
+        return res.status(200).send('Unauthorized but acknowledged'); // Returning 200 to prevent retries
+      }
+    }
     console.log('Webhook received:', JSON.stringify(req.body, null, 2));
 
     // Extract data from webhook

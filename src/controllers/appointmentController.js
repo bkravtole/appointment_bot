@@ -21,7 +21,7 @@ class AppointmentController {
         success: true,
         date,
         slots: slots.map((slot) => ({
-          time: slot.time,
+          time: slot.time, // Now in 12-hour format with AM/PM
           date: date,
         })),
       };
@@ -145,7 +145,7 @@ class AppointmentController {
         appointments: recentAppointments.map((apt) => ({
           patientName: apt.summary,
           date: new Date(apt.start).toISOString().split('T')[0],
-          time: new Date(apt.start).toTimeString().slice(0, 5),
+          time: apt.formattedTime, // 12-hour format with AM/PM
         })),
       };
     } catch (error) {

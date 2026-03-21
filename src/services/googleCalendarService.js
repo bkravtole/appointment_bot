@@ -15,6 +15,23 @@ class GoogleCalendarService {
   }
 
   /**
+   * Convert 24-hour time to 12-hour format with AM/PM
+   * @param {string} time - Time in HH:MM format (24-hour)
+   * @returns {string} Time in 12-hour format with AM/PM
+   */
+  convertTo12HourFormat(time) {
+    const [hour, minute] = time.split(':');
+    let hours = parseInt(hour, 10);
+    const minutes = minute;
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+
+    hours = hours % 12;
+    hours = hours ? hours : 12; // 0 should be 12
+
+    return `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
+  }
+
+  /**
    * Initialize Google Calendar API with Service Account credentials
    */
   initializeCalendar() {
@@ -115,9 +132,9 @@ class GoogleCalendarService {
         });
       });
 
-      // Format for 11za response (time display)
+      // Format for 11za response (time display in 12-hour format with AM/PM)
       return availableSlots.map((slot) => ({
-        time: slot.startTime,
+        time: this.convertTo12HourFormat(slot.startTime),
         startDateTime: slot.startDateTime.toISOString(),
         endDateTime: slot.endDateTime.toISOString(),
       }));
@@ -239,13 +256,21 @@ class GoogleCalendarService {
         orderBy: 'startTime',
       });
 
-      return (response.data.items || []).map((event) => ({
-        id: event.id,
-        summary: event.summary,
-        start: event.start.dateTime || event.start.date,
-        end: event.end.dateTime || event.end.date,
-        description: event.description,
-      }));
+      return (response.data.items || []).map((event) => {
+        const startTime = new Date(event.start.dateTime || event.start.date);
+        const timeInHours = startTime.getHours().toString().padStart(2, '0');
+        const timeInMinutes = startTime.getMinutes().toString().padStart(2, '0');
+        const formattedTime = this.convertTo12HourFormat(`${timeInHours}:${timeInMinutes}`);
+
+        return {
+          id: event.id,
+          summary: event.summary,
+          start: event.start.dateTime || event.start.date,
+          end: event.end.dateTime || event.end.date,
+          formattedTime, // 12-hour format with AM/PM
+          description: event.description,
+        };
+      });
     } catch (error) {
       console.error('Error fetching recent appointments:', error);
       throw error;
