@@ -133,8 +133,9 @@ class GoogleCalendarService {
       });
 
       // Format for 11za response (time display in 12-hour format with AM/PM)
-      // Limit response to first 10 slots
-      return availableSlots.slice(0, 10).map((slot) => ({
+      // Limit response to first 10 slots with unique ID
+      return availableSlots.slice(0, 10).map((slot, index) => ({
+        id: `${date}-${slot.startTime}`, // Unique ID: date + time
         time: this.convertTo12HourFormat(slot.startTime),
         startDateTime: slot.startDateTime.toISOString(),
         endDateTime: slot.endDateTime.toISOString(),
