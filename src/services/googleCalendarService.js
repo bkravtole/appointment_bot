@@ -172,11 +172,11 @@ class GoogleCalendarService {
           dateTime: endDateTime.toISOString(),
           timeZone: 'UTC',
         },
-        attendees: [
-          {
-            email: process.env.GOOGLE_CLIENT_EMAIL,
-          },
-        ],
+        // attendees: [
+        //   {
+        //     email: process.env.GOOGLE_CLIENT_EMAIL,
+        //   },
+        // ],
       };
 
       const response = await this.calendar.events.insert({
