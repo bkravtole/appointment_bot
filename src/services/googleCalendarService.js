@@ -122,8 +122,17 @@ const authClient = await auth.getClient();
         }
       }
 
-      // Filter out slots that overlap with busy periods
+      // Filter out slots that overlap with busy periods and exclude past slots
+      const today = new Date();
+      const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      
       const availableSlots = allSlots.filter((slot) => {
+        // Check if slot is in the past (only for today's date)
+        if (date === todayDate && slot.startDateTime <= today) {
+          return false; // Exclude past slots for today
+        }
+
+        // Check if slot overlaps with busy period
         return !busyPeriods.some((busyPeriod) => {
           const busyStart = new Date(busyPeriod.start);
           const busyEnd = new Date(busyPeriod.end);
@@ -242,18 +251,21 @@ const authClient = await auth.getClient();
   }
 
   /**
-   * Get all appointments from the last 2 hours
-   * @returns {Promise<Array>} Array of recent appointments
+   * Get all appointments from today onwards (next 7 days)
+   * @returns {Promise<Array>} Array of recent and upcoming appointments
    */
   async getRecentAppointments() {
     try {
       const now = new Date();
-      const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+      // Start from today at 00:00
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      // End at 7 days from now
+      const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
       const response = await this.calendar.events.list({
         calendarId: process.env.GOOGLE_CALENDAR_ID,
-        timeMin: twoHoursAgo.toISOString(),
-        timeMax: now.toISOString(),
+        timeMin: startOfToday.toISOString(),
+        timeMax: sevenDaysLater.toISOString(),
         maxResults: 50,
         singleEvents: true,
         orderBy: 'startTime',

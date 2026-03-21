@@ -135,20 +135,23 @@ class AppointmentController {
   }
 
   /**
-   * Get doctor report for appointments in the last 2 hours
+   * Get doctor report for all appointments from database
    * @returns {Promise<Object>} Report data
    */
   async getDoctorReport() {
     try {
-      const recentAppointments = await googleCalendarService.getRecentAppointments();
+      // Fetch from database instead of Google Calendar
+      const allAppointments = await databaseService.getAllAppointments();
 
       return {
         success: true,
-        totalAppointments: recentAppointments.length,
-        appointments: recentAppointments.map((apt) => ({
-          patientName: apt.summary,
-          date: new Date(apt.start).toISOString().split('T')[0],
-          time: apt.formattedTime, // 12-hour format with AM/PM
+        totalAppointments: allAppointments.length,
+        appointments: allAppointments.map((apt) => ({
+          patientName: apt.user_name,
+          phoneNumber: apt.phone_number,
+          date: apt.appointment_time.split('T')[0], // Extract date from ISO string
+          time: apt.appointment_time.split('T')[1].substring(0, 5), // Extract HH:MM
+          status: apt.status,
         })),
       };
     } catch (error) {
