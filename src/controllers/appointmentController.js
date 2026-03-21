@@ -24,7 +24,7 @@ class AppointmentController {
           id: `${date}-${slot.time}`, // Unique ID for 11za button actions
           time: slot.time, // Now in 12-hour format with AM/PM
           date: date,
-          timeid: slot.time.split(':', '_'), // For button action IDs (e.g., "slot_09_30")
+         
         })),
       };
     } catch (error) {
