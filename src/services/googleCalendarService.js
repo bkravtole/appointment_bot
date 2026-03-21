@@ -34,7 +34,8 @@ class GoogleCalendarService {
   /**
    * Initialize Google Calendar API with Service Account credentials
    */
-  initializeCalendar() {
+
+  async initializeCalendar() {
     try {
       const privateKey = process.env.GOOGLE_PRIVATE_KEY
         ? process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
@@ -55,8 +56,8 @@ class GoogleCalendarService {
         },
         scopes: ['https://www.googleapis.com/auth/calendar'],
       });
-
-      this.calendar = google.calendar({ version: 'v3', auth });
+const authClient = await auth.getClient();
+      this.calendar = google.calendar({ version: 'v3', auth: authClient });
     } catch (error) {
       console.error('Failed to initialize Google Calendar:', error);
       throw error;
