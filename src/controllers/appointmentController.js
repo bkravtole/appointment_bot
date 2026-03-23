@@ -46,6 +46,7 @@ class AppointmentController {
    * @returns {Promise<Object>} Booking confirmation
    */
   async confirmBooking(phoneNumber, date, time, userName = 'Patient') {
+    console.log(`Confirming booking for ${phoneNumber} on ${date} at ${time} for ${userName}`);
     try {
       // Create event in Google Calendar
       const event = await googleCalendarService.createAppointment(
@@ -54,7 +55,7 @@ class AppointmentController {
         time,
         userName
       );
-
+console.log('Google Calendar event created:', event);
       // Save to database
       await databaseService.saveAppointment(
         phoneNumber,
