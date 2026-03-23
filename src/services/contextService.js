@@ -101,27 +101,53 @@ class ContextService {
     }
 
     try {
-      const { data, error } = await this.supabase
+      // First, get the ID of the latest record for this user
+      const { data: latestRow, error: findError } = await this.supabase
         .from('conversation_context')
-        .upsert(
-          {
-            phone_number: phoneNumber,
+        .select('id')
+        .eq('phone_number', phoneNumber)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (findError && findError.code !== 'PGRST116') {
+        throw findError;
+      }
+
+      let result;
+      if (latestRow) {
+        // Update the existing latest record
+        const { data, error } = await this.supabase
+          .from('conversation_context')
+          .update({
             state: state,
             last_context: lastContext,
             updated_at: new Date().toISOString(),
-          },
-          {
-            onConflict: 'phone_number',
-          }
-        )
-        .select();
+          })
+          .eq('id', latestRow.id)
+          .select();
 
-      if (error) {
-        console.error('Database update error:', error);
-        throw error;
+        if (error) throw error;
+        result = data[0];
+      } else {
+        // Create a new record if none exists (unlikely in normal flow)
+        const { data, error } = await this.supabase
+          .from('conversation_context')
+          .insert({
+            phone_number: phoneNumber,
+            message: 'SYSTEM: State initialization',
+            state: state,
+            last_context: lastContext,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .select();
+
+        if (error) throw error;
+        result = data[0];
       }
 
-      return data[0];
+      return result;
     } catch (error) {
       console.error('Error updating user state:', error);
       throw error;
@@ -144,15 +170,15 @@ class ContextService {
         .from('conversation_context')
         .select('*')
         .eq('phone_number', phoneNumber)
-        .single();
+        .order('created_at', { ascending: false })
+        .limit(1);
 
-      if (error && error.code !== 'PGRST116') {
-        // PGRST116 = no rows found, which is expected
+      if (error) {
         console.error('Database query error:', error);
         throw error;
       }
 
-      return data || null;
+      return data && data.length > 0 ? data[0] : null;
     } catch (error) {
       console.error('Error fetching user state:', error);
       return null;
