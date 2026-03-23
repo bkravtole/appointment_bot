@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const appointmentController = require('../controllers/appointmentController');
+const aiController = require('../controllers/aiController');
 const elevenLabsService = require('../services/elevenLabsService');
 const elevenLabsSendService = require('../services/elevenLabsSendService');
 
@@ -73,6 +74,10 @@ router.post('/user-action', async (req, res) => {
     } else if (parsedData.content === 'cancel') {
       // Cancel appointment
       response = await appointmentController.cancelAppointment(phoneNumber);
+    } else if (parsedData.content) {
+      // Fallback to AI for general text queries
+      console.log(`🤖 Fallback to AI for content: "${parsedData.content}"`);
+      response = await aiController.processMessage(phoneNumber, parsedData.content);
     } else {
       response = {
         success: true,
@@ -94,11 +99,11 @@ router.post('/user-action', async (req, res) => {
             'hinglish'
           );
         } 
-        // If there's a confirmation message, send it
-        else if (response.message) {
+        // If there's a confirmation message or AI message, send it
+        else if (response.message || response.aiMessage) {
           whatsappDelivery = await elevenLabsSendService.sendTextMessage(
             phoneNumber,
-            response.message
+            response.message || response.aiMessage
           );
         }
         // If it's appointment data, send confirmation

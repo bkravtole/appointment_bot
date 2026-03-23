@@ -43,11 +43,27 @@ class ElevenLabsService {
    * @returns {Object} Extracted data with type and content
    */
   parseWebhookData(webhookData) {
-    // Text message
+    // Standard WhatsApp Format (WhatsApp Cloud API)
     if (webhookData.text?.body) {
       return {
         type: 'text',
         content: webhookData.text.body,
+      };
+    }
+
+    // 11za Format (content.text)
+    if (webhookData.content?.text) {
+      return {
+        type: 'text',
+        content: webhookData.content.text,
+      };
+    }
+
+    // 11za Fallback (UserResponse)
+    if (webhookData.UserResponse) {
+      return {
+        type: 'text',
+        content: webhookData.UserResponse,
       };
     }
 
