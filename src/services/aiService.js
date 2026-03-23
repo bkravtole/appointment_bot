@@ -17,8 +17,8 @@ class AIService {
 
     if (aiProvider === 'gemini' && process.env.GEMINI_API_KEY) {
       this.client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      // Using gemini-2.0-flash for best performance and latest features
-      this.modelId = 'gemini-2.0-flash';
+      // Using gemini-1.5-flash for best performance and latest features
+      this.modelId = 'gemini-1.5-flash';
       this.aiProvider = 'gemini';
       console.log('✅ Gemini AI (New SDK) initialized successfully');
     } else if (aiProvider === 'openai' && process.env.OPENAI_API_KEY) {
@@ -229,15 +229,12 @@ Keep response short (1-2 lines), natural, and friendly. Include slot suggestions
       if (this.aiProvider === 'gemini') {
         const result = await this.client.models.generateContent({
           model: this.modelId,
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          config: {
-            thinkingConfig: { includeThoughts: true } // Support for Gemini 2.0 Thinking if model supports it
-          }
+          contents: [{ role: 'user', parts: [{ text: prompt }] }]
         });
         
-        // Extract text from parts, skipping thoughts for user message
+        // Extract text from parts
         responseText = result.candidates[0].content.parts
-          .filter(part => !part.thought && part.text)
+          .filter(part => part.text)
           .map(part => part.text)
           .join('');
           
