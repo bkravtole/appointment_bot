@@ -51,8 +51,9 @@ class AIController {
       // Step 4: Get current state and save it with the new message
       const userState = await contextService.getUserState(phoneNumber);
       const currentState = userState ? userState.state : 'IDLE';
+      const lastContext = userState ? userState.last_context : null;
       
-      await contextService.saveMessage(phoneNumber, userMessage, intentData, currentState);
+      await contextService.saveMessage(phoneNumber, userMessage, intentData, currentState, lastContext);
 
       // Step 5: Handle different intents
       let response = {
