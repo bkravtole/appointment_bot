@@ -56,7 +56,7 @@ class GoogleCalendarService {
         },
         scopes: ['https://www.googleapis.com/auth/calendar'],
       });
-const authClient = await auth.getClient();
+      const authClient = await auth.getClient();
       this.calendar = google.calendar({ version: 'v3', auth: authClient });
     } catch (error) {
       console.error('Failed to initialize Google Calendar:', error);
@@ -125,7 +125,7 @@ const authClient = await auth.getClient();
       // Filter out slots that overlap with busy periods and exclude past slots
       const today = new Date();
       const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-      
+
       const availableSlots = allSlots.filter((slot) => {
         // Check if slot is in the past (only for today's date)
         if (date === todayDate && slot.startDateTime <= today) {
@@ -148,7 +148,7 @@ const authClient = await auth.getClient();
         id: `${date}-${slot.startTime}`, // Unique ID: date + time
         time12: this.convertTo12HourFormat(slot.startTime), // 12-hour format with AM/PM
         time24: slot.startTime, // 24-hour format (HH:MM)
-     
+
       }));
     } catch (error) {
       console.error('Error calculating available slots:', error);
@@ -164,40 +164,48 @@ const authClient = await auth.getClient();
    * @param {string} userName - User's name (optional)
    * @returns {Promise<Object>} Created event object
    */
-  async createAppointment(phoneNumber, date, time, userName) {
-    try {
-      const [hour, minute] = time.split(':');
-      const startDateTime = new Date(`${date}T${hour}:${minute}:00`);
-      const SLOT_DURATION = parseInt(process.env.APPOINTMENT_SLOT_DURATION) || 30;
-      const endDateTime = new Date(startDateTime.getTime() + SLOT_DURATION * 60000);
-      const TIME_ZONE = 'Asia/Kolkata';
- const event = {
-  summary: `Appointment - ${userName}`,
-  description: `Phone: ${phoneNumber}\nBooked via WhatsApp`,
-  start: {
-    dateTime: `${date}T${hour}:${minute}:00`, 
-    timeZone: TIME_ZONE,
-  },
-  end: {
-    dateTime: endDateTime.toISOString().replace('Z', ''),
-    timeZone: TIME_ZONE,
-  },
-};
-      const response = await this.calendar.events.insert({
-        calendarId: process.env.GOOGLE_CALENDAR_ID,
-        requestBody: event,
-      });
-      return {
-        eventId: response.data.id,
-        title: response.data.summary,
-        startTime: response.data.start.dateTime,
-        endTime: response.data.end.dateTime,
-      };
-    } catch (error) {
-      console.error('Error creating appointment:', error);
-      throw error;
-    }
+   formatLocalISO = (dateObj) => {
+  const pad = (n) => n.toString().padStart(2, '0');
+  return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}T${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}`;
+}
+
+ TIME_ZONE = 'Asia/Kolkata';
+ async createAppointment(phoneNumber, date, time, userName) {
+  try {
+    const [hour, minute] = time.split(':');
+    const startDateTime = new Date(`${date}T${hour}:${minute}:00`);
+    const SLOT_DURATION = parseInt(process.env.APPOINTMENT_SLOT_DURATION) || 30;
+    const endDateTime = new Date(startDateTime.getTime() + SLOT_DURATION * 60000);
+
+    const event = {
+      summary: `Appointment - ${userName}`,
+      description: `Phone: ${phoneNumber}\nBooked via WhatsApp`,
+      start: {
+        dateTime: formatLocalISO(startDateTime), // "2026-03-23T13:00:00"
+        timeZone: TIME_ZONE,
+      },
+      end: {
+        dateTime: formatLocalISO(endDateTime),   // "2026-03-23T13:30:00"
+        timeZone: TIME_ZONE,
+      },
+    };
+
+    const response = await this.calendar.events.insert({
+      calendarId: process.env.GOOGLE_CALENDAR_ID,
+      requestBody: event,
+    });
+
+    return {
+      eventId: response.data.id,
+      title: response.data.summary,
+      startTime: response.data.start.dateTime,
+      endTime: response.data.end.dateTime,
+    };
+  } catch (error) {
+    console.error('Error creating appointment:', error);
+    throw error;
   }
+}
 
   /**
    * Find an event by phone number in description
@@ -292,39 +300,41 @@ const authClient = await auth.getClient();
    * @param {string} time - New time in HH:MM format
    * @returns {Promise<Object>} Updated event object
    */
-  async updateAppointment(eventId, date, time) {
-    try {
-      const [hour, minute] = time.split(':');
-      const startDateTime = new Date(`${date}T${hour}:${minute}:00`);
-      const SLOT_DURATION = parseInt(process.env.APPOINTMENT_SLOT_DURATION) || 30;
-      const endDateTime = new Date(startDateTime.getTime() + SLOT_DURATION * 60000);
+async updateAppointment(eventId, date, time) {
+  try {
+    const [hour, minute] = time.split(':');
+    const startDateTime = new Date(`${date}T${hour}:${minute}:00`);
+    const SLOT_DURATION = parseInt(process.env.APPOINTMENT_SLOT_DURATION) || 30;
+    const endDateTime = new Date(startDateTime.getTime() + SLOT_DURATION * 60000);
 
-      const response = await this.calendar.events.update({
-        calendarId: process.env.GOOGLE_CALENDAR_ID,
-        eventId,
-        requestBody: {
-          start: {
-            dateTime: startDateTime.toISOString(),
-            timeZone: 'UTC',
-          },
-          end: {
-            dateTime: endDateTime.toISOString(),
-            timeZone: 'UTC',
-          },
+    const response = await this.calendar.events.update({
+      calendarId: process.env.GOOGLE_CALENDAR_ID,
+      eventId: eventId,
+      requestBody: {
+        // You usually want to keep the existing summary/description 
+        // unless you pass them as arguments to this function
+        start: {
+          dateTime: formatLocalISO(startDateTime),
+          timeZone: TIME_ZONE,
         },
-      });
+        end: {
+          dateTime: formatLocalISO(endDateTime),
+          timeZone: TIME_ZONE,
+        },
+      },
+    });
 
-      return {
-        eventId: response.data.id,
-        title: response.data.summary,
-        startTime: response.data.start.dateTime,
-        endTime: response.data.end.dateTime,
-      };
-    } catch (error) {
-      console.error('Error updating appointment:', error);
-      throw error;
-    }
+    return {
+      eventId: response.data.id,
+      title: response.data.summary,
+      startTime: response.data.start.dateTime,
+      endTime: response.data.end.dateTime,
+    };
+  } catch (error) {
+    console.error('Error updating appointment:', error);
+    throw error;
   }
+}
 }
 
 module.exports = new GoogleCalendarService();
