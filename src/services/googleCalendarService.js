@@ -183,12 +183,10 @@ const authClient = await auth.getClient();
     timeZone: TIME_ZONE,
   },
 };
-
       const response = await this.calendar.events.insert({
         calendarId: process.env.GOOGLE_CALENDAR_ID,
         requestBody: event,
       });
-
       return {
         eventId: response.data.id,
         title: response.data.summary,

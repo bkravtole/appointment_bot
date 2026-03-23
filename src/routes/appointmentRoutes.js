@@ -102,7 +102,7 @@ router.get('/doctor-report', async (req, res) => {
 router.post('/reschedule', async (req, res) => {
   try {
     const { phoneNumber, date, time } = req.body;
-
+console.log('Reschedule request received:', { phoneNumber, date, time });
     if (!phoneNumber || !date || !time) {
       return res.status(400).json({
         success: false,
