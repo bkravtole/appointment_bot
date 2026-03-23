@@ -48,8 +48,11 @@ class AIController {
 
       console.log('Extracted intent:', intentData);
 
-      // Step 4: Save message and intent to context
-      await contextService.saveMessage(phoneNumber, userMessage, intentData);
+      // Step 4: Get current state and save it with the new message
+      const userState = await contextService.getUserState(phoneNumber);
+      const currentState = userState ? userState.state : 'IDLE';
+      
+      await contextService.saveMessage(phoneNumber, userMessage, intentData, currentState);
 
       // Step 5: Handle different intents
       let response = {

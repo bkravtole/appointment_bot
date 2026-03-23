@@ -23,7 +23,7 @@ class ContextService {
    * @param {object} intent - Extracted intent data
    * @returns {Promise<Object>} Saved record
    */
-  async saveMessage(phoneNumber, message, intent = {}) {
+  async saveMessage(phoneNumber, message, intent = {}, state = 'IDLE') {
     if (!this.supabase) {
       console.log('Supabase not configured, skipping context save');
       return null;
@@ -38,6 +38,7 @@ class ContextService {
             message: message,
             intent: intent,
             message_type: intent.intent || 'IDLE',
+            state: state,
             created_at: new Date().toISOString(),
           },
         ])
