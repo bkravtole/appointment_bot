@@ -43,9 +43,15 @@ class AIService {
         throw new Error('AI service not configured');
       }
 
+      const currentDate = new Date().toISOString().split('T')[0];
+      const currentDay = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+
       const systemPrompt = `You are a helpful WhatsApp appointment booking assistant. Extract the user's intent from their message.
 
-USER LANGUAGES SUPPORTED: English, Hindi, Hinglish , Gujarati
+CURRENT DATE: ${currentDate} (${currentDay})
+Resolve relative dates (today, tomorrow, next week, aaj, kal, parso, etc.) to the specific YYYY-MM-DD format based on the CURRENT DATE.
+
+USER LANGUAGES SUPPORTED: English, Hindi, Hinglish, Gujarati, Marathi
 
 INTENT TYPES:
 - BOOK: User wants to book an appointment
@@ -66,20 +72,17 @@ RESPONSE FORMAT (Must be valid JSON):
   "message": "English summary of intent"
 }
 
-TIME SLOTS:
+TIME SLOTS (If unspecified, use these):
 - MORNING: 10:00-12:00
-- AFTERNOON: 12:00-16:00 (12 PM - 4 PM)
-- EVENING: 16:00-08:00 (4 PM - 8 PM)
+- AFTERNOON: 12:00-16:00
+- EVENING: 16:00-20:00
 
-EXAMPLES:
-Input: "Doctor ko kab dikhana hai"
-Output: {"intent":"QUERY","date":null,"time":null,"treatment":null,"doctor":null,"confidence":85,"message":"User asking about doctor availability"}
-
+EXAMPLES (Assuming Today is ${currentDate}):
 Input: "Kal sham book kardo"
-Output: {"intent":"BOOK","date":"NEXT_DAY","time":"EVENING","treatment":null,"doctor":null,"confidence":90,"message":"User wants to book for tomorrow evening"}
+Output: {"intent":"BOOK","date":"${new Date(Date.now() + 86400000).toISOString().split('T')[0]}","time":"EVENING","treatment":null,"doctor":null,"confidence":90,"message":"User wants to book for tomorrow evening"}
 
-Input: "Malaria ke liye appointment chahiye kal 3 baje"
-Output: {"intent":"BOOK","date":"NEXT_DAY","time":"15:00","treatment":"Malaria","doctor":null,"confidence":95,"message":"Booking for malaria treatment tomorrow at 3 PM"}
+Input: "Aaj rat ka appointment ho sakta hai?"
+Output: {"intent":"QUERY","date":"${currentDate}","time":"EVENING","treatment":null,"doctor":null,"confidence":90,"message":"User inquiring about tonight"}
 
 PREVIOUS CONTEXT:
 ${JSON.stringify(context)}

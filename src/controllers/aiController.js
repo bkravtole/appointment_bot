@@ -100,18 +100,9 @@ class AIController {
     try {
       let targetDate = intentData.date;
 
-      // If date is NEXT_DAY, calculate actual date
-      if (targetDate === 'NEXT_DAY') {
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        targetDate = tomorrow.toISOString().split('T')[0];
-      }
-
-      if (!targetDate) {
-        // Default to tomorrow if no date specified
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        targetDate = tomorrow.toISOString().split('T')[0];
+      // If date not provided or 'null' string, use today
+      if (!targetDate || targetDate === 'null') {
+        targetDate = new Date().toISOString().split('T')[0];
       }
 
       // Get available slots
@@ -201,10 +192,9 @@ class AIController {
     try {
       let targetDate = intentData.date;
 
-      if (targetDate === 'NEXT_DAY' || !targetDate) {
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        targetDate = tomorrow.toISOString().split('T')[0];
+      // If date not provided, use today
+      if (!targetDate || targetDate === 'null') {
+        targetDate = new Date().toISOString().split('T')[0];
       }
 
       const availableSlots = await googleCalendarService.getAvailableSlots(targetDate);
