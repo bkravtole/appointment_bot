@@ -8,7 +8,6 @@ const axios = require('axios');
 class ElevenLabsSendService {
   constructor() {
     this.apiKey = process.env.ELEVENLABS_TOKEN;
-    this.phoneId = process.env.ELEVENLABS_PHONE_ID;
     this.originWebsite = process.env.ELEVENLABS_ORIGIN_WEBSITE || 'https://engees.in';
     this.baseURL = 'https://internal.11za.in/apis'; // 11za API endpoint
   }
@@ -21,8 +20,8 @@ class ElevenLabsSendService {
    */
   async sendTextMessage(phoneNumber, message) {
     try {
-      if (!this.apiKey || !this.phoneId) {
-        throw new Error('11za credentials not configured (ELEVENLABS_TOKEN, ELEVENLABS_PHONE_ID)');
+      if (!this.apiKey) {
+        throw new Error('11za credentials not configured (ELEVENLABS_TOKEN)');
       }
 
       console.log(`[11za] Sending message to ${phoneNumber}: ${message}`);
@@ -73,7 +72,7 @@ class ElevenLabsSendService {
    */
   async sendListMenu(phoneNumber, title, body, options = []) {
     try {
-      if (!this.apiKey || !this.phoneId) {
+      if (!this.apiKey ) {
         throw new Error('11za credentials not configured');
       }
 
@@ -146,7 +145,7 @@ class ElevenLabsSendService {
    */
   async sendQuickReply(phoneNumber, message, buttons = []) {
     try {
-      if (!this.apiKey || !this.phoneId) {
+      if (!this.apiKey ) {
         throw new Error('11za credentials not configured');
       }
 
@@ -268,7 +267,7 @@ class ElevenLabsSendService {
    */
   async sendMedia(phoneNumber, mediaUrl, mediaType = 'image', caption = '') {
     try {
-      if (!this.apiKey || !this.phoneId) {
+      if (!this.apiKey) {
         throw new Error('11za credentials not configured');
       }
 
@@ -285,7 +284,7 @@ class ElevenLabsSendService {
         },
       };
 
-      const response = await axios.post(`${this.baseURL}/whatsapp/sendMessage`, payload, {
+      const response = await axios.post(`${this.baseURL}/sendMessage/sendMessages`, payload, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.apiKey}`,
