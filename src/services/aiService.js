@@ -96,29 +96,6 @@ Extract intent from this message and respond ONLY with valid JSON.`;
 
         responseText = result.candidates[0].content.parts[0].text;
         return this.parseJSON(responseText);
-      } else if (this.aiProvider === 'openai') {
-        const openaiResponse = await axios.post('https://api.openai.com/v1/chat/completions', {
-          model: 'gpt-3.5-turbo',
-          messages: [
-            {
-              role: 'system',
-              content: systemPrompt,
-            },
-            {
-              role: 'user',
-              content: message,
-            },
-          ],
-          temperature: 0.3,
-        }, {
-          headers: {
-            'Authorization': `Bearer ${this.openaiKey}`,
-            'Content-Type': 'application/json',
-          },
-        });
-
-        responseText = openaiResponse.data.choices[0].message.content;
-        return this.parseJSON(responseText);
       }
     } catch (error) {
       console.error('Error extracting intent:', error);
@@ -178,7 +155,10 @@ Extract intent from this message and respond ONLY with valid JSON.`;
     }
 
     const slotTexts = suggestedSlots.slice(0, 2).map((slot) => {
-      const time12 = this.convertTo12Hour(slot.time);
+      const time24 = slot.time24 || slot.time;
+      if (!time24) return `${slot.date} - Slot available`;
+
+      const time12 = this.convertTo12Hour(time24);
       return `${slot.date} - ${time12}`;
     }).join('\n');
 
@@ -197,8 +177,15 @@ Extract intent from this message and respond ONLY with valid JSON.`;
    * @returns {string} Time in 12-hour format with AM/PM
    */
   convertTo12Hour(time) {
-    const [hour, minute] = time.split(':');
+    if (!time || typeof time !== 'string') return 'N/A';
+
+    const parts = time.split(':');
+    if (parts.length < 2) return time;
+
+    const [hour, minute] = parts;
     let hrs = parseInt(hour, 10);
+    if (isNaN(hrs)) return time;
+
     const ampm = hrs >= 12 ? 'PM' : 'AM';
     hrs = hrs % 12;
     hrs = hrs || 12;
