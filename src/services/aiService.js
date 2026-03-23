@@ -46,48 +46,12 @@ class AIService {
       const currentDate = new Date().toISOString().split('T')[0];
       const currentDay = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 
-      const systemPrompt = `You are a helpful WhatsApp appointment booking assistant. Extract the user's intent from their message.
+      const systemPrompt = `WhatsApp Assistant. 
+Today: ${currentDate} (${currentDay}). 
+Extract intent/date (YYYY-MM-DD)/time/treatment.
+JSON ONLY: {"intent":"BOOK|QUERY|CANCEL|RESCHEDULE|CONFIRM|IDLE","date":"YYYY-MM-DD","time":"HH:MM|MORNING|AFTERNOON|EVENING","treatment":"string","confidence":0-100,"message":"summary"}
 
-CURRENT DATE: ${currentDate} (${currentDay})
-Resolve relative dates (today, tomorrow, next week, aaj, kal, parso, etc.) to the specific YYYY-MM-DD format based on the CURRENT DATE.
-
-USER LANGUAGES SUPPORTED: English, Hindi, Hinglish, Gujarati, Marathi
-
-INTENT TYPES:
-- BOOK: User wants to book an appointment
-- QUERY: User is asking about availability or doctors
-- CANCEL: User wants to cancel an appointment
-- RESCHEDULE: User wants to change appointment time
-- CONFIRM: User is confirming a booking
-- IDLE: General conversation, no specific action
-
-RESPONSE FORMAT (Must be valid JSON):
-{
-  "intent": "BOOK|QUERY|CANCEL|RESCHEDULE|CONFIRM|IDLE",
-  "date": "YYYY-MM-DD or null",
-  "time": "HH:MM or 'MORNING'|'AFTERNOON'|'EVENING' or null",
-  "treatment": "treatment type or null",
-  "doctor": "doctor name or null",
-  "confidence": 0-100,
-  "message": "English summary of intent"
-}
-
-TIME SLOTS (If unspecified, use these):
-- MORNING: 10:00-12:00
-- AFTERNOON: 12:00-16:00
-- EVENING: 16:00-20:00
-
-EXAMPLES (Assuming Today is ${currentDate}):
-Input: "Kal sham book kardo"
-Output: {"intent":"BOOK","date":"${new Date(Date.now() + 86400000).toISOString().split('T')[0]}","time":"EVENING","treatment":null,"doctor":null,"confidence":90,"message":"User wants to book for tomorrow evening"}
-
-Input: "Aaj rat ka appointment ho sakta hai?"
-Output: {"intent":"QUERY","date":"${currentDate}","time":"EVENING","treatment":null,"doctor":null,"confidence":90,"message":"User inquiring about tonight"}
-
-PREVIOUS CONTEXT:
-${JSON.stringify(context)}
-
-Extract intent from this message and respond ONLY with valid JSON.`;
+Context: ${JSON.stringify(context)}`;
 
       let responseText;
 
@@ -206,13 +170,11 @@ Extract intent from this message and respond ONLY with valid JSON.`;
     try {
       const slotInfo = this.generateSlotMessage(availableSlots, language);
 
-      const prompt = `Generate a friendly WhatsApp response for user intent: ${JSON.stringify(intentData)}
-
-Available slots: ${slotInfo}
-
-Language: ${language} (Hindi for 'hi', Hinglish for 'hinglish', English for 'en')
-
-Keep response short (1-2 lines), natural, and friendly. Include slot suggestions if booking intent detected.`;
+      const prompt = `Friendly WhatsApp response. 
+Intent: ${JSON.stringify(intentData)}
+Slots: ${slotInfo}
+Lang: ${language}
+Max 2 short lines. Friendly & natural.`;
 
       let responseText;
 
