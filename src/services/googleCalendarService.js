@@ -164,19 +164,19 @@ class GoogleCalendarService {
    * @param {string} userName - User's name (optional)
    * @returns {Promise<Object>} Created event object
    */
-   formatLocalISO = (dateObj) => {
-  const pad = (n) => n.toString().padStart(2, '0');
-  return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}T${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}`;
-}
 
- TIME_ZONE = 'Asia/Kolkata';
  async createAppointment(phoneNumber, date, time, userName) {
   try {
     const [hour, minute] = time.split(':');
     const startDateTime = new Date(`${date}T${hour}:${minute}:00`);
     const SLOT_DURATION = parseInt(process.env.APPOINTMENT_SLOT_DURATION) || 30;
     const endDateTime = new Date(startDateTime.getTime() + SLOT_DURATION * 60000);
+   let formatLocalISO = (dateObj) => {
+  const pad = (n) => n.toString().padStart(2, '0');
+  return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}T${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}`;
+}
 
+ const TIME_ZONE = 'Asia/Kolkata';
     const event = {
       summary: `Appointment - ${userName}`,
       description: `Phone: ${phoneNumber}\nBooked via WhatsApp`,
@@ -306,7 +306,12 @@ async updateAppointment(eventId, date, time) {
     const startDateTime = new Date(`${date}T${hour}:${minute}:00`);
     const SLOT_DURATION = parseInt(process.env.APPOINTMENT_SLOT_DURATION) || 30;
     const endDateTime = new Date(startDateTime.getTime() + SLOT_DURATION * 60000);
+   let formatLocalISO = (dateObj) => {
+  const pad = (n) => n.toString().padStart(2, '0');
+  return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}T${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}`;
+}
 
+ const TIME_ZONE = 'Asia/Kolkata';
     const response = await this.calendar.events.update({
       calendarId: process.env.GOOGLE_CALENDAR_ID,
       eventId: eventId,
