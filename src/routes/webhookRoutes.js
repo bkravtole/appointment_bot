@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const appointmentController = require('../controllers/appointmentController');
 const elevenLabsService = require('../services/elevenLabsService');
+const elevenLabsSendService = require('../services/elevenLabsSendService');
 
 /**
  * 11za Webhook Routes
@@ -80,8 +81,60 @@ router.post('/user-action', async (req, res) => {
       };
     }
 
-    // Return JSON response for 11za to use
-    res.json(response);
+    // Step 2: Auto-send response back to WhatsApp via 11za API
+    let whatsappDelivery = { success: false };
+    
+    try {
+      if (response.success) {
+        // If there are available slots, send them formatted
+        if (response.slots && Array.isArray(response.slots) && response.slots.length > 0) {
+          whatsappDelivery = await elevenLabsSendService.sendSlotOptions(
+            phoneNumber,
+            response.slots,
+            'hinglish'
+          );
+        } 
+        // If there's a confirmation message, send it
+        else if (response.message) {
+          whatsappDelivery = await elevenLabsSendService.sendTextMessage(
+            phoneNumber,
+            response.message
+          );
+        }
+        // If it's appointment data, send confirmation
+        else if (response.appointments && Array.isArray(response.appointments)) {
+          const apptText = response.appointments
+            .map(apt => `📅 ${apt.date} ${apt.time} - ${apt.doctorName || 'Dr.'}`)
+            .join('\n');
+          whatsappDelivery = await elevenLabsSendService.sendTextMessage(
+            phoneNumber,
+            apptText || 'Appointment processed successfully'
+          );
+        }
+      } else {
+        // Send error message
+        whatsappDelivery = await elevenLabsSendService.sendTextMessage(
+          phoneNumber,
+          `Error: ${response.error || 'Failed to process request'}`
+        );
+      }
+    } catch (sendError) {
+      console.error('Error sending WhatsApp message:', sendError);
+      whatsappDelivery = {
+        success: false,
+        error: sendError.message
+      };
+    }
+
+    // Return JSON response for 11za chatbot flow + delivery confirmation
+    res.json({
+      ...response,
+      whatsappDelivery: {
+        success: whatsappDelivery.success,
+        messageId: whatsappDelivery.messageId,
+        sentVia: '11za API'
+      }
+    });
   } catch (error) {
     console.error('Webhook error:', error);
     res.status(500).json({

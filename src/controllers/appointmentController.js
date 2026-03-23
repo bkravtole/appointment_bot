@@ -49,6 +49,13 @@ class AppointmentController {
     console.log(`Confirming booking for ${phoneNumber} on ${date} at ${time} for ${userName}`);
     let usernameToUse = userName || 'Patient';
     try {
+      const appointment = await databaseService.getAppointmentByPhone(phoneNumber);
+      if (appointment && appointment.date === date) {
+        return {
+          success: false,
+          error: 'Appointment Already exists for this phone number on the selected date',
+        };
+      }
       // Create event in Google Calendar
       const event = await googleCalendarService.createAppointment(
         phoneNumber,

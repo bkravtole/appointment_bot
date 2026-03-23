@@ -5,6 +5,7 @@ const cors = require('cors');
 
 const webhookRoutes = require('./src/routes/webhookRoutes');
 const appointmentRoutes = require('./src/routes/appointmentRoutes');
+const aiRoutes = require('./src/routes/aiRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -47,6 +48,9 @@ app.use('/webhook', webhookRoutes);
 
 // REST API endpoints
 app.use('/api', appointmentRoutes);
+
+// AI endpoints
+app.use('/api/ai', aiRoutes);
 
 /**
  * 404 Handler
