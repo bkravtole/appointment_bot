@@ -1,4 +1,4 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenAI } = require('@google/genai');
 const axios = require('axios');
 
 /**
@@ -16,14 +16,17 @@ class AIService {
     const aiProvider = process.env.AI_PROVIDER || 'gemini'; // gemini or openai
 
     if (aiProvider === 'gemini' && process.env.GEMINI_API_KEY) {
-      this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      this.client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      // Using gemini-2.0-flash for best performance and latest features
+      this.modelId = 'gemini-2.0-flash';
       this.aiProvider = 'gemini';
+      console.log('✅ Gemini AI (New SDK) initialized successfully');
     } else if (aiProvider === 'openai' && process.env.OPENAI_API_KEY) {
       this.openaiKey = process.env.OPENAI_API_KEY;
       this.aiProvider = 'openai';
+      console.log('✅ OpenAI initialized successfully');
     } else {
-      console.warn('AI service not configured. Please set GEMINI_API_KEY or OPENAI_API_KEY');
+      console.warn('⚠️ AI service not configured. Please set GEMINI_API_KEY or OPENAI_API_KEY');
       this.aiProvider = null;
     }
   }
@@ -83,19 +86,15 @@ ${JSON.stringify(context)}
 
 Extract intent from this message and respond ONLY with valid JSON.`;
 
-      let response;
+      let responseText;
 
       if (this.aiProvider === 'gemini') {
-        response = await this.model.generateContent({
-          contents: [
-            {
-              role: 'user',
-              parts: [{ text: `${systemPrompt}\n\nUSER MESSAGE: ${message}` }],
-            },
-          ],
+        const result = await this.client.models.generateContent({
+          model: this.modelId,
+          contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nUSER MESSAGE: ${message}` }] }]
         });
-
-        const responseText = response.response.text();
+        
+        responseText = result.candidates[0].content.parts[0].text;
         return this.parseJSON(responseText);
       } else if (this.aiProvider === 'openai') {
         const openaiResponse = await axios.post('https://api.openai.com/v1/chat/completions', {
@@ -118,7 +117,7 @@ Extract intent from this message and respond ONLY with valid JSON.`;
           },
         });
 
-        const responseText = openaiResponse.data.choices[0].message.content;
+        responseText = openaiResponse.data.choices[0].message.content;
         return this.parseJSON(responseText);
       }
     } catch (error) {
@@ -225,11 +224,24 @@ Language: ${language} (Hindi for 'hi', Hinglish for 'hinglish', English for 'en'
 
 Keep response short (1-2 lines), natural, and friendly. Include slot suggestions if booking intent detected.`;
 
-      let response;
+      let responseText;
 
       if (this.aiProvider === 'gemini') {
-        response = await this.model.generateContent(prompt);
-        return response.response.text();
+        const result = await this.client.models.generateContent({
+          model: this.modelId,
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          config: {
+            thinkingConfig: { includeThoughts: true } // Support for Gemini 2.0 Thinking if model supports it
+          }
+        });
+        
+        // Extract text from parts, skipping thoughts for user message
+        responseText = result.candidates[0].content.parts
+          .filter(part => !part.thought && part.text)
+          .map(part => part.text)
+          .join('');
+          
+        return responseText;
       } else if (this.aiProvider === 'openai') {
         const openaiResponse = await axios.post('https://api.openai.com/v1/chat/completions', {
           model: 'gpt-3.5-turbo',
