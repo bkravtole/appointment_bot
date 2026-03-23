@@ -17,7 +17,7 @@ class AIService {
 
     if (aiProvider === 'gemini' && process.env.GEMINI_API_KEY) {
       this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      this.model = this.genAI.getGenerativeModel({ model: 'gemini-pro' });
+      this.model = this.genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
       this.aiProvider = 'gemini';
     } else if (aiProvider === 'openai' && process.env.OPENAI_API_KEY) {
       this.openaiKey = process.env.OPENAI_API_KEY;
