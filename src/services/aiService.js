@@ -18,7 +18,7 @@ class AIService {
     if (aiProvider === 'gemini' && process.env.GEMINI_API_KEY) {
       this.client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       // Using gemini-1.5-flash for best performance and latest features
-      this.modelId = 'gemini-1.5-flash';
+      this.modelId = 'gemini-3-flash-preview';
       this.aiProvider = 'gemini';
       console.log('✅ Gemini AI (New SDK) initialized successfully');
     } else if (aiProvider === 'openai' && process.env.OPENAI_API_KEY) {
@@ -93,7 +93,7 @@ Extract intent from this message and respond ONLY with valid JSON.`;
           model: this.modelId,
           contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nUSER MESSAGE: ${message}` }] }]
         });
-        
+
         responseText = result.candidates[0].content.parts[0].text;
         return this.parseJSON(responseText);
       } else if (this.aiProvider === 'openai') {
@@ -231,13 +231,13 @@ Keep response short (1-2 lines), natural, and friendly. Include slot suggestions
           model: this.modelId,
           contents: [{ role: 'user', parts: [{ text: prompt }] }]
         });
-        
+
         // Extract text from parts
         responseText = result.candidates[0].content.parts
           .filter(part => part.text)
           .map(part => part.text)
           .join('');
-          
+
         return responseText;
       } else if (this.aiProvider === 'openai') {
         const openaiResponse = await axios.post('https://api.openai.com/v1/chat/completions', {
