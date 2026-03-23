@@ -164,30 +164,25 @@ const authClient = await auth.getClient();
    * @param {string} userName - User's name (optional)
    * @returns {Promise<Object>} Created event object
    */
-  async createAppointment(phoneNumber, date, time, userName = 'Patient') {
+  async createAppointment(phoneNumber, date, time, userName) {
     try {
       const [hour, minute] = time.split(':');
       const startDateTime = new Date(`${date}T${hour}:${minute}:00`);
       const SLOT_DURATION = parseInt(process.env.APPOINTMENT_SLOT_DURATION) || 30;
       const endDateTime = new Date(startDateTime.getTime() + SLOT_DURATION * 60000);
-
-      const event = {
-        summary: `Appointment - ${userName}`,
-        description: `Phone: ${phoneNumber}\nBooked via WhatsApp`,
-        start: {
-          dateTime: startDateTime.toISOString(),
-          timeZone: 'UTC',
-        },
-        end: {
-          dateTime: endDateTime.toISOString(),
-          timeZone: 'UTC',
-        },
-        // attendees: [
-        //   {
-        //     email: process.env.GOOGLE_CLIENT_EMAIL,
-        //   },
-        // ],
-      };
+      const TIME_ZONE = 'Asia/Kolkata';
+ const event = {
+  summary: `Appointment - ${userName}`,
+  description: `Phone: ${phoneNumber}\nBooked via WhatsApp`,
+  start: {
+    dateTime: `${date}T${hour}:${minute}:00`, 
+    timeZone: TIME_ZONE,
+  },
+  end: {
+    dateTime: endDateTime.toISOString().replace('Z', ''),
+    timeZone: TIME_ZONE,
+  },
+};
 
       const response = await this.calendar.events.insert({
         calendarId: process.env.GOOGLE_CALENDAR_ID,
