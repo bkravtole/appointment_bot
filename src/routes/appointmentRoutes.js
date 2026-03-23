@@ -66,12 +66,12 @@ router.post('/confirm-booking', async (req, res) => {
     }
 
     // Validate date and time format
-    if (!date.match(/^\d{4}-\d{2}-\d{2}$/) || !time.match(/^\d{2}:\d{2}$/)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid date (YYYY-MM-DD) or time (HH:MM) format',
-      });
-    }
+    // if (!date.match(/^\d{4}-\d{2}-\d{2}$/) || !time.match(/^\d{2}:\d{2}$/)) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     error: 'Invalid date (YYYY-MM-DD) or time (HH:MM) format',
+    //   });
+    // }
 
     const result = await appointmentController.confirmBooking(phoneNumber, date, time, userName);
     res.json(result);
