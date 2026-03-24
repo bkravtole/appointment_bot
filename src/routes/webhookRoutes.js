@@ -44,7 +44,11 @@ router.post('/user-action', async (req, res) => {
     let response = {};
 
     // Handle different action types
-    if (parsedData.content === 'get_available_slots' || parsedData.content?.startsWith('date_')) {
+    if (parsedData.content === 'book' || parsedData.content?.toLowerCase() === 'book') {
+      // Manual booking flow - show available slots without AI
+      console.log('📅 Manual booking flow triggered');
+      response = await aiController.handleManualBooking(phoneNumber);
+    } else if (parsedData.content === 'get_available_slots' || parsedData.content?.startsWith('date_')) {
       // Get available slots for date
       const date = parsedData.content.replace('date_', '');
       response = await appointmentController.getAvailableSlots(date);

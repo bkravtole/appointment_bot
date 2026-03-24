@@ -220,6 +220,12 @@ class AIController {
         };
       }
 
+      // Step 1.5: Check for manual booking flow (keyword "book")
+      if (userMessage.toLowerCase().trim() === 'book') {
+        console.log('📅 Manual booking flow triggered via message');
+        return await this.handleManualBooking(phoneNumber);
+      }
+
       // Step 2: Get conversation history for context
       const conversationHistory = await contextService.getConversationHistory(phoneNumber);
       const contextSummary = contextService.formatContextForAI(conversationHistory);
@@ -745,6 +751,92 @@ class AIController {
       };
     } catch (error) {
       console.error('Error handling confirm intent:', error);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Handle Manual Booking Flow (when user types "book")
+   * Shows available slots for today without AI intent extraction
+   * @param {string} phoneNumber - User's phone number
+   * @returns {Promise<Object>} Available slots
+   */
+  async handleManualBooking(phoneNumber) {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Get available slots for today
+      const slots = await googleCalendarService.getAvailableSlots(today);
+
+      if (!slots || slots.length === 0) {
+        // Check next 7 days for slots
+        let foundDate = null;
+        let foundSlots = null;
+        
+        for (let i = 1; i <= 7; i++) {
+          const date = this.addDays(today, i);
+          const daySlots = await googleCalendarService.getAvailableSlots(date);
+          if (daySlots && daySlots.length > 0) {
+            foundDate = date;
+            foundSlots = daySlots;
+            break;
+          }
+        }
+
+        if (!foundSlots) {
+          return {
+            success: false,
+            error: 'No available slots found in the next 7 days',
+          };
+        }
+
+        // Save state and return slots for next available day
+        await contextService.updateUserState(phoneNumber, 'AWAITING_SLOT_SELECTION', {
+          intent: 'BOOK',
+          pendingAction: 'BOOK',
+          date: foundDate,
+          suggestedSlots: foundSlots,
+        });
+
+        return {
+          success: true,
+          phoneNumber,
+          intent: 'BOOK',
+          date: foundDate,
+          slots: foundSlots.map((slot) => ({
+            id: slot.id,
+            time: slot.time12,
+            time24: slot.time24,
+          })),
+          message: `Aaj ke liye slots available nahi hain. ${foundDate} ke liye available slots:`,
+        };
+      }
+
+      // Save state for slot selection
+      await contextService.updateUserState(phoneNumber, 'AWAITING_SLOT_SELECTION', {
+        intent: 'BOOK',
+        pendingAction: 'BOOK',
+        date: today,
+        suggestedSlots: slots,
+      });
+
+      return {
+        success: true,
+        phoneNumber,
+        intent: 'BOOK',
+        date: today,
+        slots: slots.map((slot) => ({
+          id: slot.id,
+          time: slot.time12,
+          time24: slot.time24,
+        })),
+        message: `Aaj ke available slots:`,
+      };
+    } catch (error) {
+      console.error('Error in manual booking:', error);
       return {
         success: false,
         error: error.message,
