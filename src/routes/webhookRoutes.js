@@ -91,12 +91,15 @@ router.post('/user-action', async (req, res) => {
     
     try {
       if (response.success) {
+        let alreadySent = false;
+
         // In confirmed flow, send only final confirmation message (no slot list echo).
         if (response.intent === 'CONFIRM' && response.message) {
           whatsappDelivery = await elevenLabsSendService.sendTextMessage(
             phoneNumber,
             response.message
           );
+          alreadySent = whatsappDelivery.success;
         }
 
         const slotsToSend = Array.isArray(response.slots) && response.slots.length > 0
@@ -104,7 +107,7 @@ router.post('/user-action', async (req, res) => {
           : [];
 
         // Send slot list only for manual slot APIs, not AI booking flow.
-        if (!whatsappDelivery.success && slotsToSend.length > 0) {
+        if (!alreadySent && slotsToSend.length > 0) {
           if (response.aiMessage) {
             await elevenLabsSendService.sendTextMessage(phoneNumber, response.aiMessage);
           }
@@ -113,16 +116,18 @@ router.post('/user-action', async (req, res) => {
             slotsToSend,
             'hinglish'
           );
+          alreadySent = whatsappDelivery.success;
         } 
         // If there's a confirmation message or AI message, send it
-        else if (response.message || response.aiMessage) {
+        else if (!alreadySent && (response.message || response.aiMessage)) {
           whatsappDelivery = await elevenLabsSendService.sendTextMessage(
             phoneNumber,
             response.message || response.aiMessage
           );
+          alreadySent = whatsappDelivery.success;
         }
         // If it's appointment data, send confirmation
-        else if (response.appointments && Array.isArray(response.appointments)) {
+        else if (!alreadySent && response.appointments && Array.isArray(response.appointments)) {
           const apptText = response.appointments
             .map(apt => `📅 ${apt.date} ${apt.time} - ${apt.doctorName || 'Dr.'}`)
             .join('\n');

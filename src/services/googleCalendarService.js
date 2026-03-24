@@ -265,8 +265,11 @@ class GoogleCalendarService {
       }
 
       const TIME_ZONE = 'Asia/Kolkata';
+      const safeTitle = (userName && String(userName).trim())
+        ? String(userName).trim()
+        : 'General Consultation';
       const event = {
-        summary: `Appointment - ${userName}`,
+        summary: `Appointment - ${safeTitle}`,
         description: `Phone: ${phoneNumber}\nBooked via WhatsApp`,
         start: {
           dateTime: formatLocalISO(startDateTime), // "2026-03-23T13:00:00"
@@ -409,12 +412,19 @@ class GoogleCalendarService {
       }
 
       const TIME_ZONE = 'Asia/Kolkata';
+      const existingEvent = await this.calendar.events.get({
+        calendarId: process.env.GOOGLE_CALENDAR_ID,
+        eventId,
+      });
+      const previousSummary = existingEvent?.data?.summary || 'Appointment - General Consultation';
+      const previousDescription = existingEvent?.data?.description || 'Booked via WhatsApp';
+
       const response = await this.calendar.events.update({
         calendarId: process.env.GOOGLE_CALENDAR_ID,
         eventId: eventId,
         requestBody: {
-          // You usually want to keep the existing summary/description 
-          // unless you pass them as arguments to this function
+          summary: previousSummary,
+          description: previousDescription,
           start: {
             dateTime: formatLocalISO(startDateTime),
             timeZone: TIME_ZONE,
