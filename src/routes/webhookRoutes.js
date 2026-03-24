@@ -101,11 +101,9 @@ router.post('/user-action', async (req, res) => {
 
         const slotsToSend = Array.isArray(response.slots) && response.slots.length > 0
           ? response.slots
-          : (Array.isArray(response.suggestedSlots) && response.suggestedSlots.length > 0
-            ? response.suggestedSlots
-            : []);
+          : [];
 
-        // If there are available slots from either appointment flow or AI flow, send them formatted.
+        // Send slot list only for manual slot APIs, not AI booking flow.
         if (!whatsappDelivery.success && slotsToSend.length > 0) {
           if (response.aiMessage) {
             await elevenLabsSendService.sendTextMessage(phoneNumber, response.aiMessage);

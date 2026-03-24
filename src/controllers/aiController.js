@@ -81,6 +81,32 @@ class AIController {
     return `${String(hour).padStart(2, '0')}:${minute}`;
   }
 
+  normalizeTimeWithContext(message, rawTimeText) {
+    const base = this.normalizeTimeTo24(rawTimeText);
+    if (!base) return null;
+
+    const hasPeriod = /\b(am|pm)\b/i.test(rawTimeText);
+    if (hasPeriod) return base;
+
+    const text = (message || '').toLowerCase();
+    const hour = parseInt(base.split(':')[0], 10);
+
+    // Hindi/Hinglish context for evening requests like "5 baje sham ko".
+    if ((/\bevening\b|\bshaam\b|\bsham\b|\braat\b|\bnight\b|\bpm\b/.test(text)) && hour < 12) {
+      const adjusted = hour === 12 ? 12 : hour + 12;
+      return `${String(adjusted).padStart(2, '0')}:${base.split(':')[1]}`;
+    }
+
+    return base;
+  }
+
+  extractRequestedTimeFromMessage(message) {
+    if (!message || typeof message !== 'string') return null;
+    const match = message.match(/(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i);
+    if (!match) return null;
+    return this.normalizeTimeWithContext(message, match[1]);
+  }
+
   extractRequestedSelection(message, suggestedSlots = []) {
     if (!message || typeof message !== 'string') {
       return { slotByNumber: null, time24: null };
@@ -199,113 +225,75 @@ class AIController {
   async handleBookingIntent(phoneNumber, intentData, language, conversationHistory, userMessage = '') {
     try {
       let targetDate = intentData.date;
-      const inferredTimePreference = this.inferTimePreferenceFromMessage(userMessage);
-      const preferredTime = (intentData.time && intentData.time !== 'null')
-        ? intentData.time
-        : inferredTimePreference;
 
       // If date not provided or 'null' string, use today
       if (!targetDate || targetDate === 'null') {
         targetDate = new Date().toISOString().split('T')[0];
       }
 
-      // Get available slots
-      const allSlots = await googleCalendarService.getAvailableSlots(targetDate);
+      const requestedTimeFromMessage = this.extractRequestedTimeFromMessage(userMessage);
+      const requestedTimeFromIntent = intentData.time && !['MORNING', 'AFTERNOON', 'EVENING', 'null'].includes(intentData.time)
+        ? this.normalizeTimeTo24(intentData.time)
+        : null;
+      const selectedTime = requestedTimeFromMessage || requestedTimeFromIntent;
 
-      // Step 1: Filter by time preference if specified
-      let filteredSlots = allSlots;
-      const messageTime = new Date();
-      const messageMinutes = (messageTime.getHours() * 60) + messageTime.getMinutes();
-
-      if (preferredTime === 'MORNING') {
-        filteredSlots = allSlots.filter((slot) => {
-          const hour = parseInt(slot.time24.split(':')[0]);
-          return hour >= 10 && hour < 12;
-        });
-      } else if (preferredTime === 'AFTERNOON') {
-        filteredSlots = allSlots.filter((slot) => {
-          const hour = parseInt(slot.time24.split(':')[0]);
-          return hour >= 12 && hour < 16;
-        });
-      } else if (preferredTime === 'EVENING') {
-        filteredSlots = allSlots.filter((slot) => {
-          const hour = parseInt(slot.time24.split(':')[0]);
-          return hour >= 16 && hour < 19;
-        });
-      } else if (preferredTime && preferredTime !== 'null') {
-        // Exact time match - find closest available slot
-        const requestedHour = parseInt(preferredTime.split(':')[0]);
-        const exactMatch = allSlots.find((slot) => {
-          const slotHour = parseInt(slot.time24.split(':')[0]);
-          return slotHour === requestedHour;
-        });
-
-        if (exactMatch) {
-          filteredSlots = [exactMatch];
-        } else {
-          // If exact time not available, suggest next 2 available slots
-          filteredSlots = allSlots.slice(0, 2);
-        }
+      if (!selectedTime) {
+        return {
+          success: false,
+          error: 'Exact time bhejiye (example: 5 pm ya 17:00). Slot recommendation disabled hai.',
+        };
       }
 
-      // If no slots found for preferred time, suggest next available
-      if (filteredSlots.length === 0) {
-        filteredSlots = allSlots.slice(0, 2);
+      const isAvailable = await googleCalendarService.isSlotAvailable(targetDate, selectedTime);
+      if (!isAvailable) {
+        return {
+          success: false,
+          error: `Requested slot ${targetDate} ${selectedTime} already booked hai. Dusra exact time bhejiye.`,
+        };
       }
 
-      // If user asked for time bucket and many slots exist, prioritize slots close to current message time.
-      if ((preferredTime === 'MORNING' || preferredTime === 'AFTERNOON' || preferredTime === 'EVENING') && filteredSlots.length > 0) {
-        filteredSlots = [...filteredSlots].sort((a, b) => {
-          const aParts = a.time24.split(':').map((n) => parseInt(n, 10));
-          const bParts = b.time24.split(':').map((n) => parseInt(n, 10));
-          const aMinutes = (aParts[0] * 60) + aParts[1];
-          const bMinutes = (bParts[0] * 60) + bParts[1];
-          return Math.abs(aMinutes - messageMinutes) - Math.abs(bMinutes - messageMinutes);
-        });
+      const existingAppointment = await databaseService.getAppointmentByPhone(phoneNumber);
+      const sameDateExisting = existingAppointment?.appointment_time
+        ? existingAppointment.appointment_time.startsWith(`${targetDate}T`)
+        : false;
+
+      let event;
+      if (existingAppointment?.event_id && sameDateExisting) {
+        event = await googleCalendarService.updateAppointment(existingAppointment.event_id, targetDate, selectedTime);
+      } else {
+        event = await googleCalendarService.createAppointment(
+          phoneNumber,
+          targetDate,
+          selectedTime,
+          intentData.treatment || 'General Checkup'
+        );
       }
 
-      // Generate AI response with slots
-      let aiResponse = await aiService.generateResponse(
-        intentData,
-        filteredSlots.slice(0, 2), // Send top 2 slots
-        language
+      await databaseService.saveAppointment(
+        phoneNumber,
+        event.eventId,
+        intentData.treatment || 'General Checkup',
+        event.startTime
       );
 
-      // Guardrail: BOOK flow must never claim final confirmation.
-      if (typeof aiResponse === 'string' && /\b(confirm|confirmed|booking is confirmed|booked)\b/i.test(aiResponse)) {
-        aiResponse = 'Available slots mil gaye hain. Niche se slot number ya exact time bhejkar confirm karein.';
-      }
-
-      // Requirement: If day is mostly free and user asks evening, also mention morning option.
-      if (
-        preferredTime === 'EVENING' &&
-        allSlots.length >= 10 &&
-        filteredSlots.length > 0
-      ) {
-        aiResponse += '\nMorning slots bhi available hain. Agar aap chahein to morning bhi book kar sakte hain, warna evening slot confirm kar dein.';
-      }
-
-      // Update user state to AWAITING_CONFIRMATION
-      await contextService.updateUserState(phoneNumber, 'AWAITING_CONFIRMATION', {
-        intent: intentData.intent,
+      await contextService.updateUserState(phoneNumber, 'CONFIRMED', {
+        appointmentId: event.eventId,
         date: targetDate,
-        suggestedSlots: filteredSlots.slice(0, 2),
+        time: selectedTime,
         treatment: intentData.treatment,
-        requestedTimePreference: preferredTime || null,
       });
 
       return {
         success: true,
         phoneNumber,
-        intent: 'BOOK',
-        date: targetDate,
-        suggestedSlots: filteredSlots.slice(0, 2).map((slot) => ({
-          id: slot.id,
-          time12: slot.time12,
-          time24: slot.time24,
-        })),
-        aiMessage: aiResponse,
-        userPrompt: `Choose one of the slots above to confirm booking`,
+        intent: 'CONFIRM',
+        appointment: {
+          date: targetDate,
+          time: selectedTime,
+          time12: googleCalendarService.convertTo12HourFormat(selectedTime),
+          eventId: event.eventId,
+        },
+        message: `Appointment confirmed for ${targetDate} at ${googleCalendarService.convertTo12HourFormat(selectedTime)}`,
       };
     } catch (error) {
       console.error('Error handling booking intent:', error);
