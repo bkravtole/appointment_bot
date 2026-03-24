@@ -49,22 +49,34 @@ class AppointmentController {
     console.log(`Confirming booking for ${phoneNumber} on ${date} at ${time} for ${userName}`);
     let usernameToUse = userName || 'Patient';
     try {
+      // Step 1: Check if this user already has an appointment on this date
       const appointment = await databaseService.getAppointmentByPhone(phoneNumber);
-      if (appointment && appointment.date === date) {
+      if (appointment && appointment.appointment_time?.startsWith(`${date}T`)) {
         return {
           success: false,
-          error: 'Appointment Already exists for this phone number on the selected date',
+          error: 'Aapki is date par already appointment hai',
         };
       }
-      // Create event in Google Calendar
+
+      // Step 2: Check if the slot is actually available (no conflicts with other users)
+      const isAvailable = await googleCalendarService.isSlotAvailable(date, time);
+      if (!isAvailable) {
+        return {
+          success: false,
+          error: `Ye time slot already booked hai. Dusra time select kariye.`,
+        };
+      }
+
+      // Step 3: Create event in Google Calendar
       const event = await googleCalendarService.createAppointment(
         phoneNumber,
         date,
         time,
         usernameToUse
       );
-console.log('Google Calendar event created:', event);
-      // Save to database
+      console.log('Google Calendar event created:', event);
+
+      // Step 4: Save to database
       await databaseService.saveAppointment(
         phoneNumber,
         event.eventId,
