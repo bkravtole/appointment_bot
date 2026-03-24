@@ -423,11 +423,46 @@ class AIController {
         : null;
       const selectedTime = requestedTimeFromMessage || requestedTimeFromIntent;
 
+      // If time not provided, show available slots for that date
       if (!selectedTime) {
-        return {
-          success: false,
-          error: 'Exact time bhejiye (example: 5 pm ya 17:00). Slot recommendation disabled hai.',
-        };
+        try {
+          const availableSlots = await googleCalendarService.getAvailableSlots(targetDate);
+          
+          if (!availableSlots || availableSlots.length === 0) {
+            return {
+              success: false,
+              error: `${targetDate} par koi slot available nahi hai. Dusri date try kariye.`,
+            };
+          }
+
+          // Save state for slot selection
+          await contextService.updateUserState(phoneNumber, 'AWAITING_SLOT_SELECTION', {
+            intent: 'BOOK',
+            pendingAction: 'BOOK',
+            date: targetDate,
+            suggestedSlots: availableSlots,
+            treatment: intentData.treatment || this.extractTreatmentFromMessage(userMessage) || 'General Checkup',
+          });
+
+          return {
+            success: true,
+            phoneNumber,
+            intent: 'BOOK',
+            date: targetDate,
+            slots: availableSlots.map((slot) => ({
+              id: slot.id,
+              time: slot.time12,
+              time24: slot.time24,
+            })),
+            message: `${targetDate} ke liye available slots:`,
+          };
+        } catch (error) {
+          console.error('Error fetching available slots:', error);
+          return {
+            success: false,
+            error: 'Slots fetch karte time error aaya. Please try again.',
+          };
+        }
       }
 
       if (!googleCalendarService.isWithinOfficeHours(selectedTime)) {
