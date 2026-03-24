@@ -43,6 +43,11 @@ class AIController {
     const text = message.trim().toLowerCase();
     if (!text) return false;
 
+    // If user already provided an explicit time, don't treat it as "any available".
+    if (/\b\d{1,2}(:\d{2})?\s*(am|pm)?\b/i.test(text)) {
+      return false;
+    }
+
     const phrases = [
       'jo available ho',
       'jo available hai',
@@ -52,9 +57,7 @@ class AIController {
       'any slot',
       'first available',
       'next available',
-      'available slot book',
-      'kar do',
-      'book kar do'
+      'available slot book'
     ];
 
     return phrases.some((phrase) => text.includes(phrase));
@@ -125,7 +128,7 @@ class AIController {
 
     const timePattern = /(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i;
     const timeMatch = trimmed.match(timePattern);
-    const time24 = timeMatch ? this.normalizeTimeTo24(timeMatch[1]) : null;
+    const time24 = timeMatch ? this.normalizeTimeWithContext(trimmed, timeMatch[1]) : null;
 
     return { slotByNumber, time24 };
   }
