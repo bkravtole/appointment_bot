@@ -91,11 +91,20 @@ router.post('/user-action', async (req, res) => {
     
     try {
       if (response.success) {
-        // If there are available slots, send them formatted
-        if (response.slots && Array.isArray(response.slots) && response.slots.length > 0) {
+        const slotsToSend = Array.isArray(response.slots) && response.slots.length > 0
+          ? response.slots
+          : (Array.isArray(response.suggestedSlots) && response.suggestedSlots.length > 0
+            ? response.suggestedSlots
+            : []);
+
+        // If there are available slots from either appointment flow or AI flow, send them formatted.
+        if (slotsToSend.length > 0) {
+          if (response.aiMessage) {
+            await elevenLabsSendService.sendTextMessage(phoneNumber, response.aiMessage);
+          }
           whatsappDelivery = await elevenLabsSendService.sendSlotOptions(
             phoneNumber,
-            response.slots,
+            slotsToSend,
             'hinglish'
           );
         } 
