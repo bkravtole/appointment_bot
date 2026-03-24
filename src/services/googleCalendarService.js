@@ -92,11 +92,50 @@ class GoogleCalendarService {
   }
 
   /**
+   * Check if a specific slot window is free in calendar
+   * @param {string} date - Date in YYYY-MM-DD format
+   * @param {string} time - Time in HH:MM format
+   * @param {string|null} excludeEventId - Event ID to ignore (for updates)
+   * @returns {Promise<boolean>} True if slot has no overlap
+   */
+  async isSlotAvailable(date, time, excludeEventId = null) {
+    try {
+      const [hour, minute] = time.split(':');
+      const slotStart = new Date(`${date}T${hour}:${minute}:00`);
+      const SLOT_DURATION = parseInt(process.env.APPOINTMENT_SLOT_DURATION) || 30;
+      const slotEnd = new Date(slotStart.getTime() + SLOT_DURATION * 60000);
+
+      const response = await this.calendar.events.list({
+        calendarId: process.env.GOOGLE_CALENDAR_ID,
+        timeMin: slotStart.toISOString(),
+        timeMax: slotEnd.toISOString(),
+        singleEvents: true,
+        showDeleted: false,
+        maxResults: 20,
+      });
+
+      const overlapping = (response.data.items || []).filter((event) => {
+        if (excludeEventId && event.id === excludeEventId) return false;
+        if (event.status === 'cancelled') return false;
+
+        const eventStart = new Date(event.start.dateTime || event.start.date);
+        const eventEnd = new Date(event.end.dateTime || event.end.date);
+        return slotStart < eventEnd && slotEnd > eventStart;
+      });
+
+      return overlapping.length === 0;
+    } catch (error) {
+      console.error('Error checking slot availability:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Calculate available 30-minute slots for a given date
    * @param {string} date - Date in YYYY-MM-DD format
    * @returns {Promise<Array>} Array of available time slots
    */
-  async getAvailableSlots(date) {
+  async getAvailableSlots(date, maxSlots = 10) {
     try {
       const SLOT_DURATION = parseInt(process.env.APPOINTMENT_SLOT_DURATION) || 30; // minutes
       const OFFICE_START = parseInt(process.env.OFFICE_HOURS_START) || 10; // 10 AM
@@ -143,13 +182,15 @@ class GoogleCalendarService {
       });
 
       // Format for 11za response (time display in 12-hour format with AM/PM)
-      // Limit response to first 10 slots with unique ID and both time formats
-      return availableSlots.slice(0, 10).map((slot, index) => ({
+      const formattedSlots = availableSlots.map((slot, index) => ({
         id: `${date}-${slot.startTime}`, // Unique ID: date + time
         time12: this.convertTo12HourFormat(slot.startTime), // 12-hour format with AM/PM
         time24: slot.startTime, // 24-hour format (HH:MM)
 
       }));
+
+      // Default behavior: return only next 10 upcoming slots
+      return formattedSlots.slice(0, maxSlots);
     } catch (error) {
       console.error('Error calculating available slots:', error);
       throw error;
@@ -167,6 +208,11 @@ class GoogleCalendarService {
 
   async createAppointment(phoneNumber, date, time, userName) {
     try {
+      const isFree = await this.isSlotAvailable(date, time);
+      if (!isFree) {
+        throw new Error(`Time slot ${date} ${time} is already booked`);
+      }
+
       const [hour, minute] = time.split(':');
       const startDateTime = new Date(`${date}T${hour}:${minute}:00`);
       const SLOT_DURATION = parseInt(process.env.APPOINTMENT_SLOT_DURATION) || 30;
@@ -302,6 +348,11 @@ class GoogleCalendarService {
    */
   async updateAppointment(eventId, date, time) {
     try {
+      const isFree = await this.isSlotAvailable(date, time, eventId);
+      if (!isFree) {
+        throw new Error(`Time slot ${date} ${time} is already booked`);
+      }
+
       const [hour, minute] = time.split(':');
       const startDateTime = new Date(`${date}T${hour}:${minute}:00`);
       const SLOT_DURATION = parseInt(process.env.APPOINTMENT_SLOT_DURATION) || 30;

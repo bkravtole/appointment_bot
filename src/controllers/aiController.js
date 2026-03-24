@@ -38,6 +38,28 @@ class AIController {
     return null;
   }
 
+  isAnyAvailableBookingRequest(message) {
+    if (!message || typeof message !== 'string') return false;
+    const text = message.trim().toLowerCase();
+    if (!text) return false;
+
+    const phrases = [
+      'jo available ho',
+      'jo available hai',
+      'available ho to kar do',
+      'koi bhi available',
+      'any available',
+      'any slot',
+      'first available',
+      'next available',
+      'available slot book',
+      'kar do',
+      'book kar do'
+    ];
+
+    return phrases.some((phrase) => text.includes(phrase));
+  }
+
   normalizeTimeTo24(timeText) {
     if (!timeText || typeof timeText !== 'string') return null;
 
@@ -192,6 +214,8 @@ class AIController {
 
       // Step 1: Filter by time preference if specified
       let filteredSlots = allSlots;
+      const messageTime = new Date();
+      const messageMinutes = (messageTime.getHours() * 60) + messageTime.getMinutes();
 
       if (preferredTime === 'MORNING') {
         filteredSlots = allSlots.filter((slot) => {
@@ -229,12 +253,32 @@ class AIController {
         filteredSlots = allSlots.slice(0, 2);
       }
 
+      // If user asked for time bucket and many slots exist, prioritize slots close to current message time.
+      if ((preferredTime === 'MORNING' || preferredTime === 'AFTERNOON' || preferredTime === 'EVENING') && filteredSlots.length > 0) {
+        filteredSlots = [...filteredSlots].sort((a, b) => {
+          const aParts = a.time24.split(':').map((n) => parseInt(n, 10));
+          const bParts = b.time24.split(':').map((n) => parseInt(n, 10));
+          const aMinutes = (aParts[0] * 60) + aParts[1];
+          const bMinutes = (bParts[0] * 60) + bParts[1];
+          return Math.abs(aMinutes - messageMinutes) - Math.abs(bMinutes - messageMinutes);
+        });
+      }
+
       // Generate AI response with slots
-      const aiResponse = await aiService.generateResponse(
+      let aiResponse = await aiService.generateResponse(
         intentData,
         filteredSlots.slice(0, 2), // Send top 2 slots
         language
       );
+
+      // Requirement: If day is mostly free and user asks evening, also mention morning option.
+      if (
+        preferredTime === 'EVENING' &&
+        allSlots.length >= 10 &&
+        filteredSlots.length > 0
+      ) {
+        aiResponse += '\nMorning slots bhi available hain. Agar aap chahein to morning bhi book kar sakte hain, warna evening slot confirm kar dein.';
+      }
 
       // Update user state to AWAITING_CONFIRMATION
       await contextService.updateUserState(phoneNumber, 'AWAITING_CONFIRMATION', {
@@ -366,6 +410,7 @@ class AIController {
         userMessage,
         suggestedSlots
       );
+      const anyAvailableRequested = this.isAnyAvailableBookingRequest(userMessage);
 
       let selectedTime = null;
       let selectedSlot = null;
@@ -373,6 +418,18 @@ class AIController {
       if (slotByNumber) {
         selectedSlot = slotByNumber;
         selectedTime = slotByNumber.time24;
+      } else if (anyAvailableRequested) {
+        const availableSlots = await googleCalendarService.getAvailableSlots(date);
+        const now = new Date();
+        const oneHourLaterMinutes = (now.getHours() * 60) + now.getMinutes() + 60;
+        const slotAfterOneHour = availableSlots.find((slot) => {
+          const [h, m] = slot.time24.split(':').map((n) => parseInt(n, 10));
+          const slotMinutes = (h * 60) + m;
+          return slotMinutes >= oneHourLaterMinutes;
+        });
+
+        selectedSlot = slotAfterOneHour || availableSlots[0] || null;
+        selectedTime = selectedSlot ? selectedSlot.time24 : null;
       } else if (requestedTime24) {
         selectedSlot = suggestedSlots.find((slot) => slot.time24 === requestedTime24) || null;
         selectedTime = selectedSlot ? selectedSlot.time24 : requestedTime24;
