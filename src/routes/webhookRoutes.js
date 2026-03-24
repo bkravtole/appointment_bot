@@ -153,10 +153,10 @@ router.post('/user-action', async (req, res) => {
           );
         }
       } else {
-        // Send error message
+        // Send error as regular message (without "Error:" prefix)
         whatsappDelivery = await elevenLabsSendService.sendTextMessage(
           phoneNumber,
-          `Error: ${response.error || 'Failed to process request'}`
+          response.error || 'Failed to process request'
         );
       }
     } catch (sendError) {
