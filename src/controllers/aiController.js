@@ -11,6 +11,30 @@ const databaseService = require('../services/supabaseService');
  */
 
 class AIController {
+  addDays(dateStr, days) {
+    const d = new Date(`${dateStr}T00:00:00`);
+    d.setDate(d.getDate() + days);
+    return d.toISOString().split('T')[0];
+  }
+
+  async getNextDayRecommendation(fromDate, preferredTime = null) {
+    for (let i = 1; i <= 7; i++) {
+      const date = this.addDays(fromDate, i);
+      const slots = await googleCalendarService.getAvailableSlots(date);
+      if (!slots || slots.length === 0) continue;
+
+      if (preferredTime) {
+        const preferredHour = parseInt(preferredTime.split(':')[0], 10);
+        const hourMatch = slots.find((slot) => parseInt(slot.time24.split(':')[0], 10) === preferredHour);
+        if (hourMatch) return { date, slot: hourMatch };
+      }
+
+      return { date, slot: slots[0] };
+    }
+
+    return null;
+  }
+
   isRescheduleMessage(message) {
     if (!message || typeof message !== 'string') return false;
     const text = message.toLowerCase();
@@ -232,6 +256,7 @@ class AIController {
       const looksLikeTime = typeof userMessage === 'string' && /\d{1,2}(:\d{2})?\s*(am|pm)?/i.test(userMessage);
       const looksLikeAffirmative = this.isAffirmativeMessage(userMessage);
       const looksLikeReschedule = this.isRescheduleMessage(userMessage);
+      const pendingAction = userState?.last_context?.pendingAction || userState?.last_context?.intent || null;
 
       if (intentData.intent === 'RESCHEDULE' || looksLikeReschedule) {
         response = await this.handleRescheduleIntent(
@@ -253,7 +278,21 @@ class AIController {
       } else if (intentData.intent === 'CANCEL') {
         response = await this.handleCancelIntent(phoneNumber, language);
       } else if (intentData.intent === 'CONFIRM' || (awaitingConfirmation && (looksLikeSlotNumber || looksLikeTime || looksLikeAffirmative))) {
-        response = await this.handleConfirmIntent(phoneNumber, intentData, language, userMessage);
+        if (awaitingConfirmation && looksLikeAffirmative && pendingAction === 'RESCHEDULE') {
+          const suggestedSlot = userState?.last_context?.suggestedSlots?.[0];
+          response = await this.handleRescheduleIntent(
+            phoneNumber,
+            intentData,
+            language,
+            userMessage,
+            {
+              forceDate: userState?.last_context?.date,
+              forceTime: suggestedSlot?.time24,
+            }
+          );
+        } else {
+          response = await this.handleConfirmIntent(phoneNumber, intentData, language, userMessage);
+        }
       }
 
       return response;
@@ -266,9 +305,9 @@ class AIController {
     }
   }
 
-  async handleRescheduleIntent(phoneNumber, intentData, language, userMessage = '') {
+  async handleRescheduleIntent(phoneNumber, intentData, language, userMessage = '', options = {}) {
     try {
-      let targetDate = intentData.date;
+      let targetDate = options.forceDate || intentData.date;
       if (!targetDate || targetDate === 'null') {
         const existing = await databaseService.getAppointmentByPhone(phoneNumber);
         targetDate = existing?.appointment_time?.split('T')[0] || new Date().toISOString().split('T')[0];
@@ -278,12 +317,36 @@ class AIController {
       const requestedTimeFromIntent = intentData.time && !['MORNING', 'AFTERNOON', 'EVENING', 'null'].includes(intentData.time)
         ? this.normalizeTimeTo24(intentData.time)
         : null;
-      const selectedTime = requestedTimeFromMessage || requestedTimeFromIntent;
+      const selectedTime = options.forceTime || requestedTimeFromMessage || requestedTimeFromIntent;
 
       if (!selectedTime) {
         return {
           success: false,
           error: 'Reschedule ke liye exact naya time bhejiye (example: 6 pm).',
+        };
+      }
+
+      if (!googleCalendarService.isWithinOfficeHours(selectedTime)) {
+        const recommendation = await this.getNextDayRecommendation(targetDate, selectedTime);
+        if (!recommendation) {
+          return {
+            success: false,
+            error: 'Requested time business hours ke bahar hai, aur next days me slot nahi mila.',
+          };
+        }
+        await contextService.updateUserState(phoneNumber, 'AWAITING_CONFIRMATION', {
+          intent: 'RESCHEDULE',
+          pendingAction: 'RESCHEDULE',
+          date: recommendation.date,
+          suggestedSlots: [recommendation.slot],
+          treatment: existingAppointment?.user_name || intentData.treatment || 'General Checkup',
+        });
+        return {
+          success: true,
+          phoneNumber,
+          intent: 'RESCHEDULE',
+          suggestedSlots: [recommendation.slot],
+          message: `Requested time business hours ke bahar hai. Next available slot ${recommendation.date} ${recommendation.slot.time12} hai. Confirm ke liye "ok" bhejiye.`,
         };
       }
 
@@ -361,6 +424,30 @@ class AIController {
         return {
           success: false,
           error: 'Exact time bhejiye (example: 5 pm ya 17:00). Slot recommendation disabled hai.',
+        };
+      }
+
+      if (!googleCalendarService.isWithinOfficeHours(selectedTime)) {
+        const recommendation = await this.getNextDayRecommendation(targetDate, selectedTime);
+        if (!recommendation) {
+          return {
+            success: false,
+            error: 'Requested time business hours ke bahar hai, aur next days me slot nahi mila.',
+          };
+        }
+        await contextService.updateUserState(phoneNumber, 'AWAITING_CONFIRMATION', {
+          intent: 'BOOK',
+          pendingAction: 'BOOK',
+          date: recommendation.date,
+          suggestedSlots: [recommendation.slot],
+          treatment: intentData.treatment || this.extractTreatmentFromMessage(userMessage) || 'General Checkup',
+        });
+        return {
+          success: true,
+          phoneNumber,
+          intent: 'BOOK',
+          suggestedSlots: [recommendation.slot],
+          message: `Requested time business hours ke bahar hai. Next available slot ${recommendation.date} ${recommendation.slot.time12} hai. Confirm ke liye "ok" bhejiye.`,
         };
       }
 
