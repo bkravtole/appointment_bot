@@ -88,9 +88,10 @@ router.post('/user-action', async (req, res) => {
       console.log(`🤖 Fallback to AI for content: "${parsedData.content}"`);
       response = await aiController.processMessage(phoneNumber, parsedData.content);
     } else {
+      // No content to process - don't send any message
       response = {
         success: true,
-        message: 'Webhook received and processed',
+        silent: true,  // Flag to skip sending WhatsApp message
         receivedAction: parsedData.content,
       };
     }
@@ -99,6 +100,12 @@ router.post('/user-action', async (req, res) => {
     let whatsappDelivery = { success: false };
     
     try {
+      // Skip sending message if marked as silent (no content to respond to)
+      if (response.silent) {
+        console.log('📵 Silent response - no WhatsApp message sent');
+        return res.json({ success: true, processed: true });
+      }
+
       if (response.success) {
         let alreadySent = false;
 
