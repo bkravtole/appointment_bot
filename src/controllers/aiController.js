@@ -270,13 +270,25 @@ class AIController {
           userMessage
         );
       } else if (intentData.intent === 'BOOK') {
-        response = await this.handleBookingIntent(
-          phoneNumber,
-          intentData,
-          language,
-          conversationHistory,
-          userMessage
-        );
+        // Validate that booking is for medical appointments, not unrelated things
+        const nonMedicalKeywords = ['movie', 'ticket', 'flight', 'hotel', 'car', 'restaurant', 'pizza', 'food', 'show', 'concert', 'game'];
+        const treatment = (intentData.treatment || '').toLowerCase();
+        const isNonMedical = nonMedicalKeywords.some(keyword => treatment.includes(keyword));
+        
+        if (isNonMedical) {
+          response = {
+            success: false,
+            error: 'We only provide medical appointment booking services. Please let me know if you need to book a doctor appointment.',
+          };
+        } else {
+          response = await this.handleBookingIntent(
+            phoneNumber,
+            intentData,
+            language,
+            conversationHistory,
+            userMessage
+          );
+        }
       } else if (intentData.intent === 'QUERY') {
         response = await this.handleQueryIntent(phoneNumber, intentData, language);
       } else if (intentData.intent === 'CANCEL') {
