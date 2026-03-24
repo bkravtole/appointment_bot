@@ -1,9 +1,9 @@
-const { GoogleGenAI } = require('@google/genai');
+const Groq = require('groq-sdk');
 const axios = require('axios');
 
 /**
  * AI Service
- * Handles intent extraction, response generation using Gemini/OpenAI
+ * Handles intent extraction, response generation using Groq/Gemini/OpenAI
  * Supports multilingual inputs (English, Hindi, Hinglish)
  */
 
@@ -13,11 +13,19 @@ class AIService {
   }
 
   initializeAI() {
-    const aiProvider = process.env.AI_PROVIDER || 'gemini'; // gemini or openai
+    const aiProvider = process.env.AI_PROVIDER || 'groq'; // groq, gemini or openai
 
-    if (aiProvider === 'gemini' && process.env.GEMINI_API_KEY) {
+    if (aiProvider === 'groq' && process.env.GROQ_API_KEY) {
+      this.client = new Groq({
+        apiKey: process.env.GROQ_API_KEY,
+      });
+      // Using llama-3.3-70b-versatile for high quality and speed
+      this.modelId = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+      this.aiProvider = 'groq';
+      console.log(`✅ Groq AI initialized successfully with model: ${this.modelId}`);
+    } else if (aiProvider === 'gemini' && process.env.GEMINI_API_KEY) {
+      const { GoogleGenAI } = require('@google/genai');
       this.client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      // Using gemini-1.5-flash for best performance and latest features
       this.modelId = 'gemini-3-flash-preview';
       this.aiProvider = 'gemini';
       console.log('✅ Gemini AI (New SDK) initialized successfully');
@@ -26,7 +34,7 @@ class AIService {
       this.aiProvider = 'openai';
       console.log('✅ OpenAI initialized successfully');
     } else {
-      console.warn('⚠️ AI service not configured. Please set GEMINI_API_KEY or OPENAI_API_KEY');
+      console.warn('⚠️ AI service not configured correctly. Please check AI_PROVIDER and API keys.');
       this.aiProvider = null;
     }
   }
@@ -55,7 +63,19 @@ Context: ${JSON.stringify(context)}`;
 
       let responseText;
 
-      if (this.aiProvider === 'gemini') {
+      if (this.aiProvider === 'groq') {
+        const chatCompletion = await this.client.chat.completions.create({
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `USER MESSAGE: ${message}` }
+          ],
+          model: this.modelId,
+          response_format: { type: "json_object" }
+        });
+
+        responseText = chatCompletion.choices[0].message.content;
+        return JSON.parse(responseText);
+      } else if (this.aiProvider === 'gemini') {
         const result = await this.client.models.generateContent({
           model: this.modelId,
           contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nUSER MESSAGE: ${message}` }] }]
@@ -178,7 +198,19 @@ Max 2 short lines. Friendly & natural.`;
 
       let responseText;
 
-      if (this.aiProvider === 'gemini') {
+      if (this.aiProvider === 'groq') {
+        const chatCompletion = await this.client.chat.completions.create({
+          messages: [
+            { role: 'user', content: prompt }
+          ],
+          model: this.modelId,
+          temperature: 0.7,
+          max_tokens: 150,
+        });
+
+        responseText = chatCompletion.choices[0].message.content;
+        return responseText;
+      } else if (this.aiProvider === 'gemini') {
         const result = await this.client.models.generateContent({
           model: this.modelId,
           contents: [{ role: 'user', parts: [{ text: prompt }] }]
