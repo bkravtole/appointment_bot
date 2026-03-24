@@ -271,6 +271,11 @@ class AIController {
         language
       );
 
+      // Guardrail: BOOK flow must never claim final confirmation.
+      if (typeof aiResponse === 'string' && /\b(confirm|confirmed|booking is confirmed|booked)\b/i.test(aiResponse)) {
+        aiResponse = 'Available slots mil gaye hain. Niche se slot number ya exact time bhejkar confirm karein.';
+      }
+
       // Requirement: If day is mostly free and user asks evening, also mention morning option.
       if (
         preferredTime === 'EVENING' &&

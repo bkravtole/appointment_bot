@@ -165,7 +165,7 @@ class GoogleCalendarService {
       const today = new Date();
       const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-      const availableSlots = allSlots.filter((slot) => {
+      const candidateSlots = allSlots.filter((slot) => {
         // Check if slot is in the past (only for today's date)
         if (date === todayDate && slot.startDateTime <= today) {
           return false; // Exclude past slots for today
@@ -182,6 +182,21 @@ class GoogleCalendarService {
       });
 
       // Format for 11za response (time display in 12-hour format with AM/PM)
+      // Second pass validation against live events API for stronger race/consistency safety.
+      const availabilityChecks = await Promise.all(
+        candidateSlots.map(async (slot) => {
+          try {
+            const free = await this.isSlotAvailable(date, slot.startTime);
+            return free ? slot : null;
+          } catch (error) {
+            console.error('Slot recheck failed:', error.message);
+            return null;
+          }
+        })
+      );
+
+      const availableSlots = availabilityChecks.filter(Boolean);
+
       const formattedSlots = availableSlots.map((slot, index) => ({
         id: `${date}-${slot.startTime}`, // Unique ID: date + time
         time12: this.convertTo12HourFormat(slot.startTime), // 12-hour format with AM/PM

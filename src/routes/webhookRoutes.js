@@ -91,6 +91,14 @@ router.post('/user-action', async (req, res) => {
     
     try {
       if (response.success) {
+        // In confirmed flow, send only final confirmation message (no slot list echo).
+        if (response.intent === 'CONFIRM' && response.message) {
+          whatsappDelivery = await elevenLabsSendService.sendTextMessage(
+            phoneNumber,
+            response.message
+          );
+        }
+
         const slotsToSend = Array.isArray(response.slots) && response.slots.length > 0
           ? response.slots
           : (Array.isArray(response.suggestedSlots) && response.suggestedSlots.length > 0
@@ -98,7 +106,7 @@ router.post('/user-action', async (req, res) => {
             : []);
 
         // If there are available slots from either appointment flow or AI flow, send them formatted.
-        if (slotsToSend.length > 0) {
+        if (!whatsappDelivery.success && slotsToSend.length > 0) {
           if (response.aiMessage) {
             await elevenLabsSendService.sendTextMessage(phoneNumber, response.aiMessage);
           }
