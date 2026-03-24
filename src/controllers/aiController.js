@@ -307,10 +307,12 @@ class AIController {
 
   async handleRescheduleIntent(phoneNumber, intentData, language, userMessage = '', options = {}) {
     try {
+      // Fetch existing appointment once at the start
+      const existingAppointment = await databaseService.getAppointmentByPhone(phoneNumber);
+      
       let targetDate = options.forceDate || intentData.date;
       if (!targetDate || targetDate === 'null') {
-        const existing = await databaseService.getAppointmentByPhone(phoneNumber);
-        targetDate = existing?.appointment_time?.split('T')[0] || new Date().toISOString().split('T')[0];
+        targetDate = existingAppointment?.appointment_time?.split('T')[0] || new Date().toISOString().split('T')[0];
       }
 
       const requestedTimeFromMessage = this.extractRequestedTimeFromMessage(userMessage);
@@ -349,8 +351,6 @@ class AIController {
           message: `Requested time business hours ke bahar hai. Next available slot ${recommendation.date} ${recommendation.slot.time12} hai. Confirm ke liye "ok" bhejiye.`,
         };
       }
-
-      const existingAppointment = await databaseService.getAppointmentByPhone(phoneNumber);
       if (!existingAppointment?.event_id) {
         return {
           success: false,
