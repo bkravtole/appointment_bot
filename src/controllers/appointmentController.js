@@ -1,5 +1,6 @@
 const googleCalendarService = require('../services/googleCalendarService');
 const databaseService = require('../services/supabaseService');
+const reminderService = require('../services/reminderService');
 
 /**
  * Appointment Controller
@@ -84,6 +85,19 @@ class AppointmentController {
         event.startTime
       );
 
+      // Step 5: Schedule reminder for 1 hour before appointment
+      try {
+        const reminderResult = await reminderService.scheduleReminder(
+          phoneNumber,
+          event.eventId,
+          event.startTime,
+          usernameToUse
+        );
+        console.log('✅ Reminder scheduled:', reminderResult.success ? reminderResult.reminderId : reminderResult.error);
+      } catch (reminderError) {
+        console.error('Warning: Failed to schedule reminder:', reminderError.message);
+      }
+
       return {
         success: true,
         appointment: {
@@ -136,6 +150,20 @@ class AppointmentController {
         appointment.user_name,
         updatedEvent.startTime
       );
+
+      // Cancel old reminder and schedule new one
+      try {
+        await reminderService.cancelReminder(phoneNumber, appointment.event_id);
+        const reminderResult = await reminderService.scheduleReminder(
+          phoneNumber,
+          appointment.event_id,
+          updatedEvent.startTime,
+          appointment.user_name
+        );
+        console.log('✅ New reminder scheduled after reschedule:', reminderResult.success ? reminderResult.reminderId : reminderResult.error);
+      } catch (reminderError) {
+        console.error('Warning: Failed to update reminder:', reminderError.message);
+      }
 
       return {
         success: true,
@@ -205,6 +233,14 @@ class AppointmentController {
 
       // Delete from database
       await databaseService.deleteAppointment(phoneNumber);
+
+      // Cancel the reminder
+      try {
+        const cancelResult = await reminderService.cancelReminder(phoneNumber, appointment.event_id);
+        console.log('✅ Reminder cancelled:', cancelResult.success ? cancelResult.message : cancelResult.error);
+      } catch (reminderError) {
+        console.error('Warning: Failed to cancel reminder:', reminderError.message);
+      }
 
       return {
         success: true,

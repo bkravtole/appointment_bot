@@ -3,6 +3,7 @@ const audioService = require('../services/audioService');
 const contextService = require('../services/contextService');
 const googleCalendarService = require('../services/googleCalendarService');
 const databaseService = require('../services/supabaseService');
+const reminderService = require('../services/reminderService');
 
 /**
  * AI Controller
@@ -404,6 +405,20 @@ class AIController {
         updatedEvent.startTime
       );
 
+      // Cancel old reminder and schedule new one
+      try {
+        await reminderService.cancelReminder(phoneNumber, existingAppointment.event_id);
+        const reminderResult = await reminderService.scheduleReminder(
+          phoneNumber,
+          existingAppointment.event_id,
+          updatedEvent.startTime,
+          existingAppointment.user_name || intentData.treatment || 'General Checkup'
+        );
+        console.log('✅ New reminder scheduled after reschedule:', reminderResult.success ? reminderResult.reminderId : reminderResult.error);
+      } catch (reminderError) {
+        console.error('Warning: Failed to update reminder:', reminderError.message);
+      }
+
       await contextService.updateUserState(phoneNumber, 'CONFIRMED', {
         appointmentId: existingAppointment.event_id,
         date: targetDate,
@@ -553,6 +568,19 @@ class AIController {
         event.startTime
       );
 
+      // Schedule reminder for 1 hour before appointment
+      try {
+        const reminderResult = await reminderService.scheduleReminder(
+          phoneNumber,
+          event.eventId,
+          event.startTime,
+          treatmentName
+        );
+        console.log('✅ Reminder scheduled:', reminderResult.success ? reminderResult.reminderId : reminderResult.error);
+      } catch (reminderError) {
+        console.error('Warning: Failed to schedule reminder:', reminderError.message);
+      }
+
       await contextService.updateUserState(phoneNumber, 'CONFIRMED', {
         appointmentId: event.eventId,
         date: targetDate,
@@ -635,8 +663,19 @@ class AIController {
         };
       }
 
+      const appointmentId = userState.last_context.appointmentId;
+
       // Cancel the appointment
-      await googleCalendarService.deleteAppointment(userState.last_context.appointmentId);
+      await googleCalendarService.deleteAppointment(appointmentId);
+
+      // Cancel the reminder
+      try {
+        const cancelResult = await reminderService.cancelReminder(phoneNumber, appointmentId);
+        console.log('✅ Reminder cancelled:', cancelResult.success ? cancelResult.message : cancelResult.error);
+      } catch (reminderError) {
+        console.error('Warning: Failed to cancel reminder:', reminderError.message);
+      }
+
       await contextService.updateUserState(phoneNumber, 'CANCELLED', {});
 
       const messages = {
@@ -773,6 +812,19 @@ class AIController {
         event.startTime
       );
 
+      // Schedule reminder for 1 hour before appointment
+      try {
+        const reminderResult = await reminderService.scheduleReminder(
+          phoneNumber,
+          event.eventId,
+          event.startTime,
+          intentData.treatment || 'General Checkup'
+        );
+        console.log('✅ Reminder scheduled:', reminderResult.success ? reminderResult.reminderId : reminderResult.error);
+      } catch (reminderError) {
+        console.error('Warning: Failed to schedule reminder:', reminderError.message);
+      }
+
       // Update state
       await contextService.updateUserState(phoneNumber, 'CONFIRMED', {
         appointmentId: event.eventId,
@@ -872,6 +924,20 @@ class AIController {
         'General Checkup',
         event.startTime
       );
+
+      // Schedule reminder for 1 hour before appointment
+      try {
+        const userName = userState?.last_context?.treatment || 'General Checkup';
+        const reminderResult = await reminderService.scheduleReminder(
+          phoneNumber,
+          event.eventId,
+          event.startTime,
+          userName
+        );
+        console.log('✅ Reminder scheduled:', reminderResult.success ? reminderResult.reminderId : reminderResult.error);
+      } catch (reminderError) {
+        console.error('Warning: Failed to schedule reminder:', reminderError.message);
+      }
 
       await contextService.updateUserState(phoneNumber, 'CONFIRMED', {
         appointmentId: event.eventId,
