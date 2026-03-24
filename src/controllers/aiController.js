@@ -220,11 +220,8 @@ class AIController {
         };
       }
 
-      // Step 1.5: Check for manual booking flow (keyword "book")
-      if (userMessage.toLowerCase().trim() === 'book') {
-        console.log('📅 Manual booking flow triggered via message');
-        return await this.handleManualBooking(phoneNumber);
-      }
+      // Note: "book" keyword is handled by webhook to trigger 11za flow
+      // AI flow processes everything else
 
       // Step 2: Get conversation history for context
       const conversationHistory = await contextService.getConversationHistory(phoneNumber);

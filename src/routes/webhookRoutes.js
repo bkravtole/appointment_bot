@@ -45,9 +45,14 @@ router.post('/user-action', async (req, res) => {
 
     // Handle different action types
     if (parsedData.content === 'book' || parsedData.content?.toLowerCase() === 'book') {
-      // Manual booking flow - show available slots without AI
-      console.log('📅 Manual booking flow triggered');
-      response = await aiController.handleManualBooking(phoneNumber);
+      // Trigger 11za's booking flow - return action to switch flows
+      console.log('📅 Switching to 11za booking flow (69be7fce6e0b91f4ba6a26df)');
+      response = {
+        success: true,
+        action: 'flow',
+        flowName: '69be7fce6e0b91f4ba6a26df',  // Your booking flow ID from 11za
+        message: 'Let me help you book an appointment...'
+      };
     } else if (parsedData.content === 'get_available_slots' || parsedData.content?.startsWith('date_')) {
       // Get available slots for date
       const date = parsedData.content.replace('date_', '');
