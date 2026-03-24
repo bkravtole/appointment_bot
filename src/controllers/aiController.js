@@ -255,6 +255,7 @@ class AIController {
       };
 
       const awaitingConfirmation = currentState === 'AWAITING_CONFIRMATION';
+      const awaitingSlotSelection = currentState === 'AWAITING_SLOT_SELECTION';
       const looksLikeSlotNumber = typeof userMessage === 'string' && /^\s*\d{1,2}\s*$/.test(userMessage);
       const looksLikeTime = typeof userMessage === 'string' && /\d{1,2}(:\d{2})?\s*(am|pm)?/i.test(userMessage);
       const looksLikeAffirmative = this.isAffirmativeMessage(userMessage);
@@ -280,6 +281,9 @@ class AIController {
         response = await this.handleQueryIntent(phoneNumber, intentData, language);
       } else if (intentData.intent === 'CANCEL') {
         response = await this.handleCancelIntent(phoneNumber, language);
+      } else if (awaitingSlotSelection && looksLikeSlotNumber) {
+        // User is selecting from available slots
+        response = await this.handleSlotSelection(phoneNumber, userMessage, userState, language);
       } else if (intentData.intent === 'CONFIRM' || (awaitingConfirmation && (looksLikeSlotNumber || looksLikeTime || looksLikeAffirmative))) {
         if (awaitingConfirmation && looksLikeAffirmative && pendingAction === 'RESCHEDULE') {
           const suggestedSlot = userState?.last_context?.suggestedSlots?.[0];
@@ -779,6 +783,98 @@ class AIController {
       };
     } catch (error) {
       console.error('Error handling confirm intent:', error);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Handle slot selection when user selects from available slots
+   * @param {string} phoneNumber - User's phone number
+   * @param {string} userMessage - User's message (slot number)
+   * @param {Object} userState - Current user state with suggestedSlots
+   * @param {string} language - Language preference
+   * @returns {Promise<Object>} Booking result
+   */
+  async handleSlotSelection(phoneNumber, userMessage, userState, language) {
+    try {
+      const slots = userState?.last_context?.suggestedSlots || [];
+      const date = userState?.last_context?.date;
+
+      if (!date || !slots || slots.length === 0) {
+        return {
+          success: false,
+          error: 'No pending slot selection found. Please start booking again.',
+        };
+      }
+
+      // Extract slot number from message
+      const slotNumber = parseInt(userMessage.trim(), 10);
+      
+      // Validate slot number (1-based index)
+      if (isNaN(slotNumber) || slotNumber < 1 || slotNumber > slots.length) {
+        return {
+          success: false,
+          error: `Invalid slot number. Please choose between 1 and ${slots.length}.`,
+        };
+      }
+
+      // Get selected slot (convert to 0-based index)
+      const selectedSlot = slots[slotNumber - 1];
+
+      if (!selectedSlot || !selectedSlot.time24) {
+        return {
+          success: false,
+          error: 'Selected slot is invalid. Please try again.',
+        };
+      }
+
+      // Check if slot is still available
+      const isAvailable = await googleCalendarService.isSlotAvailable(date, selectedSlot.time24);
+      if (!isAvailable) {
+        return {
+          success: false,
+          error: `This slot ${selectedSlot.time12} is no longer available. Please choose another.`,
+        };
+      }
+
+      // Create the appointment
+      const event = await googleCalendarService.createAppointment(
+        phoneNumber,
+        date,
+        selectedSlot.time24,
+        'General Checkup'
+      );
+
+      await databaseService.saveAppointment(
+        phoneNumber,
+        event.eventId,
+        'General Checkup',
+        event.startTime
+      );
+
+      await contextService.updateUserState(phoneNumber, 'CONFIRMED', {
+        appointmentId: event.eventId,
+        date,
+        time: selectedSlot.time24,
+      });
+
+      return {
+        success: true,
+        phoneNumber,
+        intent: 'CONFIRM',
+        appointment: {
+          date,
+          time: selectedSlot.time24,
+          time12: selectedSlot.time12,
+          eventId: event.eventId,
+        },
+        message: `Appointment confirmed for ${date} at ${selectedSlot.time12}`,
+      };
+    } catch (error) {
+      console.error('Error handling slot selection:', error);
       return {
         success: false,
         error: error.message,
