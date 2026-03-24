@@ -11,6 +11,23 @@ const databaseService = require('../services/supabaseService');
  */
 
 class AIController {
+  isRescheduleMessage(message) {
+    if (!message || typeof message !== 'string') return false;
+    const text = message.toLowerCase();
+    return (
+      text.includes('reschedule') ||
+      text.includes('change time') ||
+      text.includes('change slot') ||
+      text.includes('slot change') ||
+      text.includes('time change') ||
+      text.includes('time badal') ||
+      text.includes('slot badal') ||
+      text.includes('badal do') ||
+      text.includes('dusre time') ||
+      text.includes('another time')
+    );
+  }
+
   isAffirmativeMessage(message) {
     if (!message || typeof message !== 'string') return false;
     const text = message.trim().toLowerCase();
@@ -214,8 +231,16 @@ class AIController {
       const looksLikeSlotNumber = typeof userMessage === 'string' && /^\s*\d{1,2}\s*$/.test(userMessage);
       const looksLikeTime = typeof userMessage === 'string' && /\d{1,2}(:\d{2})?\s*(am|pm)?/i.test(userMessage);
       const looksLikeAffirmative = this.isAffirmativeMessage(userMessage);
+      const looksLikeReschedule = this.isRescheduleMessage(userMessage);
 
-      if (intentData.intent === 'BOOK' || intentData.intent === 'RESCHEDULE') {
+      if (intentData.intent === 'RESCHEDULE' || looksLikeReschedule) {
+        response = await this.handleRescheduleIntent(
+          phoneNumber,
+          intentData,
+          language,
+          userMessage
+        );
+      } else if (intentData.intent === 'BOOK') {
         response = await this.handleBookingIntent(
           phoneNumber,
           intentData,
@@ -234,6 +259,78 @@ class AIController {
       return response;
     } catch (error) {
       console.error('Error processing message:', error);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  async handleRescheduleIntent(phoneNumber, intentData, language, userMessage = '') {
+    try {
+      let targetDate = intentData.date;
+      if (!targetDate || targetDate === 'null') {
+        const existing = await databaseService.getAppointmentByPhone(phoneNumber);
+        targetDate = existing?.appointment_time?.split('T')[0] || new Date().toISOString().split('T')[0];
+      }
+
+      const requestedTimeFromMessage = this.extractRequestedTimeFromMessage(userMessage);
+      const requestedTimeFromIntent = intentData.time && !['MORNING', 'AFTERNOON', 'EVENING', 'null'].includes(intentData.time)
+        ? this.normalizeTimeTo24(intentData.time)
+        : null;
+      const selectedTime = requestedTimeFromMessage || requestedTimeFromIntent;
+
+      if (!selectedTime) {
+        return {
+          success: false,
+          error: 'Reschedule ke liye exact naya time bhejiye (example: 6 pm).',
+        };
+      }
+
+      const existingAppointment = await databaseService.getAppointmentByPhone(phoneNumber);
+      if (!existingAppointment?.event_id) {
+        return {
+          success: false,
+          error: 'Aapki koi existing booking nahi mili. Pehle booking create karein.',
+        };
+      }
+
+      const isAvailable = await googleCalendarService.isSlotAvailable(targetDate, selectedTime, existingAppointment.event_id);
+      if (!isAvailable) {
+        return {
+          success: false,
+          error: `Requested slot ${targetDate} ${selectedTime} already booked hai. Dusra exact time bhejiye.`,
+        };
+      }
+
+      const updatedEvent = await googleCalendarService.updateAppointment(
+        existingAppointment.event_id,
+        targetDate,
+        selectedTime
+      );
+
+      await databaseService.saveAppointment(
+        phoneNumber,
+        existingAppointment.event_id,
+        existingAppointment.user_name || intentData.treatment || 'General Checkup',
+        updatedEvent.startTime
+      );
+
+      await contextService.updateUserState(phoneNumber, 'CONFIRMED', {
+        appointmentId: existingAppointment.event_id,
+        date: targetDate,
+        time: selectedTime,
+        treatment: existingAppointment.user_name || intentData.treatment || 'General Checkup',
+      });
+
+      return {
+        success: true,
+        phoneNumber,
+        intent: 'CONFIRM',
+        message: `Appointment rescheduled to ${targetDate} at ${googleCalendarService.convertTo12HourFormat(selectedTime)}`,
+      };
+    } catch (error) {
+      console.error('Error handling reschedule intent:', error);
       return {
         success: false,
         error: error.message,
@@ -281,17 +378,30 @@ class AIController {
         ? existingAppointment.appointment_time.startsWith(`${targetDate}T`)
         : false;
 
-      let event;
+      // Do not auto-replace existing booking. Reschedule must be explicit.
       if (existingAppointment?.event_id && sameDateExisting) {
-        event = await googleCalendarService.updateAppointment(existingAppointment.event_id, targetDate, selectedTime);
-      } else {
-        event = await googleCalendarService.createAppointment(
-          phoneNumber,
-          targetDate,
-          selectedTime,
-          treatmentName
-        );
+        const existingTime = existingAppointment.appointment_time.split('T')[1]?.substring(0, 5);
+        if (existingTime === selectedTime) {
+          return {
+            success: true,
+            phoneNumber,
+            intent: 'CONFIRM',
+            message: `Aapki booking already ${targetDate} ${googleCalendarService.convertTo12HourFormat(selectedTime)} par confirmed hai.`,
+          };
+        }
+
+        return {
+          success: false,
+          error: `Aapki ${targetDate} ki booking already ${existingTime} par hai. Change ke liye 'reschedule' message bhejiye.`,
+        };
       }
+
+      const event = await googleCalendarService.createAppointment(
+        phoneNumber,
+        targetDate,
+        selectedTime,
+        treatmentName
+      );
 
       await databaseService.saveAppointment(
         phoneNumber,
@@ -484,22 +594,34 @@ class AIController {
       }
 
       const existingAppointment = await databaseService.getAppointmentByPhone(phoneNumber);
-      let event;
       const sameDateExisting = existingAppointment?.appointment_time
         ? existingAppointment.appointment_time.startsWith(`${date}T`)
         : false;
 
+      // Do not auto-replace existing booking. Reschedule must be explicit.
       if (existingAppointment?.event_id && sameDateExisting) {
-        // User asked a different time on same date -> move existing appointment.
-        event = await googleCalendarService.updateAppointment(existingAppointment.event_id, date, selectedTime);
-      } else {
-        event = await googleCalendarService.createAppointment(
-          phoneNumber,
-          date,
-          selectedTime,
-          intentData.treatment || 'General Checkup'
-        );
+        const existingTime = existingAppointment.appointment_time.split('T')[1]?.substring(0, 5);
+        if (existingTime === selectedTime) {
+          return {
+            success: true,
+            phoneNumber,
+            intent: 'CONFIRM',
+            message: `Aapki booking already ${date} ${googleCalendarService.convertTo12HourFormat(selectedTime)} par confirmed hai.`,
+          };
+        }
+
+        return {
+          success: false,
+          error: `Aapki ${date} ki booking already ${existingTime} par hai. Change ke liye 'reschedule' message bhejiye.`,
+        };
       }
+
+      const event = await googleCalendarService.createAppointment(
+        phoneNumber,
+        date,
+        selectedTime,
+        intentData.treatment || 'General Checkup'
+      );
 
       await databaseService.saveAppointment(
         phoneNumber,
