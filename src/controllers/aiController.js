@@ -300,6 +300,12 @@ class AIController {
         } else {
           response = await this.handleConfirmIntent(phoneNumber, intentData, language, userMessage);
         }
+      } else if (intentData.intent === 'IDLE' || intentData.confidence === 0) {
+        // User sent unrelated/unclear message
+        response = {
+          success: false,
+          error: 'I\'m here to help you book medical appointments. Please tell me what you need help with regarding your appointment.',
+        };
       }
 
       return response;
