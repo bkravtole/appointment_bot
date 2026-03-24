@@ -11,6 +11,33 @@ const databaseService = require('../services/supabaseService');
  */
 
 class AIController {
+  isAffirmativeMessage(message) {
+    if (!message || typeof message !== 'string') return false;
+    const text = message.trim().toLowerCase();
+    if (!text) return false;
+
+    const affirmativePhrases = [
+      'ok', 'okay', 'yes', 'yep', 'yeah', 'sure', 'done', 'confirm', 'book it',
+      'haan', 'ha', 'han', 'hanji', 'haanji', 'ji', 'thik hai', 'theek hai',
+      'thik h', 'theek h', 'kar do', 'kr do', 'kardo', 'kar dijiye', 'kr dijiye',
+      'ho gaya', 'chalega', 'sahi hai'
+    ];
+
+    return affirmativePhrases.some((phrase) => text === phrase || text.includes(phrase));
+  }
+
+  inferTimePreferenceFromMessage(message) {
+    if (!message || typeof message !== 'string') return null;
+    const text = message.toLowerCase();
+
+    // English + Hindi/Hinglish keywords
+    if (/\bmorning\b|\bsubah\b|\bmrng\b/.test(text)) return 'MORNING';
+    if (/\bafternoon\b|\bdupahar\b|\bdopehar\b|\bnoon\b/.test(text)) return 'AFTERNOON';
+    if (/\bevening\b|\bshaam\b|\bsham\b|\braat\b|\bnight\b/.test(text)) return 'EVENING';
+
+    return null;
+  }
+
   normalizeTimeTo24(timeText) {
     if (!timeText || typeof timeText !== 'string') return null;
 
@@ -115,19 +142,21 @@ class AIController {
       const awaitingConfirmation = currentState === 'AWAITING_CONFIRMATION';
       const looksLikeSlotNumber = typeof userMessage === 'string' && /^\s*\d{1,2}\s*$/.test(userMessage);
       const looksLikeTime = typeof userMessage === 'string' && /\d{1,2}(:\d{2})?\s*(am|pm)?/i.test(userMessage);
+      const looksLikeAffirmative = this.isAffirmativeMessage(userMessage);
 
       if (intentData.intent === 'BOOK' || intentData.intent === 'RESCHEDULE') {
         response = await this.handleBookingIntent(
           phoneNumber,
           intentData,
           language,
-          conversationHistory
+          conversationHistory,
+          userMessage
         );
       } else if (intentData.intent === 'QUERY') {
         response = await this.handleQueryIntent(phoneNumber, intentData, language);
       } else if (intentData.intent === 'CANCEL') {
         response = await this.handleCancelIntent(phoneNumber, language);
-      } else if (intentData.intent === 'CONFIRM' || (awaitingConfirmation && (looksLikeSlotNumber || looksLikeTime))) {
+      } else if (intentData.intent === 'CONFIRM' || (awaitingConfirmation && (looksLikeSlotNumber || looksLikeTime || looksLikeAffirmative))) {
         response = await this.handleConfirmIntent(phoneNumber, intentData, language, userMessage);
       }
 
@@ -145,9 +174,13 @@ class AIController {
    * Handle BOOK intent - Find matching slots
    * @private
    */
-  async handleBookingIntent(phoneNumber, intentData, language, conversationHistory) {
+  async handleBookingIntent(phoneNumber, intentData, language, conversationHistory, userMessage = '') {
     try {
       let targetDate = intentData.date;
+      const inferredTimePreference = this.inferTimePreferenceFromMessage(userMessage);
+      const preferredTime = (intentData.time && intentData.time !== 'null')
+        ? intentData.time
+        : inferredTimePreference;
 
       // If date not provided or 'null' string, use today
       if (!targetDate || targetDate === 'null') {
@@ -160,24 +193,24 @@ class AIController {
       // Step 1: Filter by time preference if specified
       let filteredSlots = allSlots;
 
-      if (intentData.time === 'MORNING') {
+      if (preferredTime === 'MORNING') {
         filteredSlots = allSlots.filter((slot) => {
           const hour = parseInt(slot.time24.split(':')[0]);
           return hour >= 10 && hour < 12;
         });
-      } else if (intentData.time === 'AFTERNOON') {
+      } else if (preferredTime === 'AFTERNOON') {
         filteredSlots = allSlots.filter((slot) => {
           const hour = parseInt(slot.time24.split(':')[0]);
           return hour >= 12 && hour < 16;
         });
-      } else if (intentData.time === 'EVENING') {
+      } else if (preferredTime === 'EVENING') {
         filteredSlots = allSlots.filter((slot) => {
           const hour = parseInt(slot.time24.split(':')[0]);
           return hour >= 16 && hour < 19;
         });
-      } else if (intentData.time && intentData.time !== 'null') {
+      } else if (preferredTime && preferredTime !== 'null') {
         // Exact time match - find closest available slot
-        const requestedHour = parseInt(intentData.time.split(':')[0]);
+        const requestedHour = parseInt(preferredTime.split(':')[0]);
         const exactMatch = allSlots.find((slot) => {
           const slotHour = parseInt(slot.time24.split(':')[0]);
           return slotHour === requestedHour;
@@ -209,6 +242,7 @@ class AIController {
         date: targetDate,
         suggestedSlots: filteredSlots.slice(0, 2),
         treatment: intentData.treatment,
+        requestedTimePreference: preferredTime || null,
       });
 
       return {
@@ -342,9 +376,9 @@ class AIController {
       } else if (requestedTime24) {
         selectedSlot = suggestedSlots.find((slot) => slot.time24 === requestedTime24) || null;
         selectedTime = selectedSlot ? selectedSlot.time24 : requestedTime24;
-      } else if (intentData.time && intentData.time !== 'null') {
-        selectedTime = this.normalizeTimeTo24(intentData.time) || intentData.time;
       } else if (suggestedSlots.length > 0) {
+        // Generic confirmations like "ok/yes" should confirm the first suggested slot,
+        // not stale extracted intent values from the previous turn (e.g. EVENING).
         selectedSlot = suggestedSlots[0];
         selectedTime = selectedSlot.time24;
       }
