@@ -1,8 +1,8 @@
 const express = require('express');
 const aiController = require('../controllers/aiController');
-const elevenLabsService = require('../services/elevenLabsService');
 
 const router = express.Router();
+
 
 /**
  * POST /api/ai/process-message
@@ -101,34 +101,5 @@ router.post('/transcribe', async (req, res) => {
     });
   }
 });
-
-/**
- * Helper function to format AI response for 11za
- * @private
- */
-function formatAI11zaResponse(aiResult) {
-  if (!aiResult.success) {
-    return `Error: ${aiResult.error}`;
-  }
-
-  let response = '';
-
-  if (aiResult.aiMessage) {
-    response = aiResult.aiMessage;
-  }
-
-  if (aiResult.suggestedSlots && aiResult.suggestedSlots.length > 0) {
-    response += '\n\nAvailable slots:\n';
-    aiResult.suggestedSlots.forEach((slot, index) => {
-      response += `${index + 1}. ${slot.time12}\n`;
-    });
-  }
-
-  if (aiResult.message) {
-    response = aiResult.message;
-  }
-
-  return response || 'Processing your request...';
-}
 
 module.exports = router;

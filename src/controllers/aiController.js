@@ -2,6 +2,7 @@ const aiService = require('../services/aiService');
 const audioService = require('../services/audioService');
 const contextService = require('../services/contextService');
 const googleCalendarService = require('../services/googleCalendarService');
+const databaseService = require('../services/supabaseService');
 
 /**
  * AI Controller
@@ -10,6 +11,50 @@ const googleCalendarService = require('../services/googleCalendarService');
  */
 
 class AIController {
+  normalizeTimeTo24(timeText) {
+    if (!timeText || typeof timeText !== 'string') return null;
+
+    const normalized = timeText.trim().toUpperCase().replace(/\./g, '');
+    const match = normalized.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/);
+    if (!match) return null;
+
+    let hour = parseInt(match[1], 10);
+    const minute = match[2] || '00';
+    const period = match[3] || null;
+
+    if (period === 'AM') {
+      if (hour === 12) hour = 0;
+    } else if (period === 'PM') {
+      if (hour !== 12) hour += 12;
+    }
+
+    if (hour < 0 || hour > 23) return null;
+    return `${String(hour).padStart(2, '0')}:${minute}`;
+  }
+
+  extractRequestedSelection(message, suggestedSlots = []) {
+    if (!message || typeof message !== 'string') {
+      return { slotByNumber: null, time24: null };
+    }
+
+    const trimmed = message.trim();
+    const numberMatch = trimmed.match(/^(\d{1,2})$/);
+    let slotByNumber = null;
+
+    if (numberMatch) {
+      const index = parseInt(numberMatch[1], 10) - 1;
+      if (index >= 0 && index < suggestedSlots.length) {
+        slotByNumber = suggestedSlots[index];
+      }
+    }
+
+    const timePattern = /(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i;
+    const timeMatch = trimmed.match(timePattern);
+    const time24 = timeMatch ? this.normalizeTimeTo24(timeMatch[1]) : null;
+
+    return { slotByNumber, time24 };
+  }
+
   /**
    * Process user message (text or audio)
    * @param {string} phoneNumber - User's phone number
@@ -67,6 +112,10 @@ class AIController {
         confidence: intentData.confidence,
       };
 
+      const awaitingConfirmation = currentState === 'AWAITING_CONFIRMATION';
+      const looksLikeSlotNumber = typeof userMessage === 'string' && /^\s*\d{1,2}\s*$/.test(userMessage);
+      const looksLikeTime = typeof userMessage === 'string' && /\d{1,2}(:\d{2})?\s*(am|pm)?/i.test(userMessage);
+
       if (intentData.intent === 'BOOK' || intentData.intent === 'RESCHEDULE') {
         response = await this.handleBookingIntent(
           phoneNumber,
@@ -78,8 +127,8 @@ class AIController {
         response = await this.handleQueryIntent(phoneNumber, intentData, language);
       } else if (intentData.intent === 'CANCEL') {
         response = await this.handleCancelIntent(phoneNumber, language);
-      } else if (intentData.intent === 'CONFIRM') {
-        response = await this.handleConfirmIntent(phoneNumber, intentData, language);
+      } else if (intentData.intent === 'CONFIRM' || (awaitingConfirmation && (looksLikeSlotNumber || looksLikeTime))) {
+        response = await this.handleConfirmIntent(phoneNumber, intentData, language, userMessage);
       }
 
       return response;
@@ -267,7 +316,7 @@ class AIController {
    * Handle CONFIRM intent - Finalize booking
    * @private
    */
-  async handleConfirmIntent(phoneNumber, intentData, language) {
+  async handleConfirmIntent(phoneNumber, intentData, language, userMessage = '') {
     try {
       const userState = await contextService.getUserState(phoneNumber);
 
@@ -278,18 +327,77 @@ class AIController {
         };
       }
 
-      const { date, suggestedSlots } = userState.last_context;
+      const { date, suggestedSlots = [] } = userState.last_context;
+      const { slotByNumber, time24: requestedTime24 } = this.extractRequestedSelection(
+        userMessage,
+        suggestedSlots
+      );
 
-      // Use the first suggested slot (user confirmed implicitly)
-      const selectedSlot = suggestedSlots[0];
-      const selectedTime = selectedSlot.time24;
+      let selectedTime = null;
+      let selectedSlot = null;
 
-      // Create the appointment
-      const event = await googleCalendarService.createAppointment(
+      if (slotByNumber) {
+        selectedSlot = slotByNumber;
+        selectedTime = slotByNumber.time24;
+      } else if (requestedTime24) {
+        selectedSlot = suggestedSlots.find((slot) => slot.time24 === requestedTime24) || null;
+        selectedTime = selectedSlot ? selectedSlot.time24 : requestedTime24;
+      } else if (intentData.time && intentData.time !== 'null') {
+        selectedTime = this.normalizeTimeTo24(intentData.time) || intentData.time;
+      } else if (suggestedSlots.length > 0) {
+        selectedSlot = suggestedSlots[0];
+        selectedTime = selectedSlot.time24;
+      }
+
+      if (!selectedTime) {
+        return {
+          success: false,
+          error: 'Please choose a valid slot number or time to confirm',
+        };
+      }
+
+      // Validate selected time is currently available
+      const availableSlots = await googleCalendarService.getAvailableSlots(date);
+      const isSelectedTimeAvailable = availableSlots.some((slot) => slot.time24 === selectedTime);
+
+      if (!isSelectedTimeAvailable) {
+        return {
+          success: false,
+          error: `Selected time ${selectedTime} is not available. Please choose another slot.`,
+          availableSlots: availableSlots.slice(0, 3),
+        };
+      }
+
+      if (!selectedSlot) {
+        selectedSlot = availableSlots.find((slot) => slot.time24 === selectedTime) || {
+          time24: selectedTime,
+          time12: googleCalendarService.convertTo12HourFormat(selectedTime),
+        };
+      }
+
+      const existingAppointment = await databaseService.getAppointmentByPhone(phoneNumber);
+      let event;
+      const sameDateExisting = existingAppointment?.appointment_time
+        ? existingAppointment.appointment_time.startsWith(`${date}T`)
+        : false;
+
+      if (existingAppointment?.event_id && sameDateExisting) {
+        // User asked a different time on same date -> move existing appointment.
+        event = await googleCalendarService.updateAppointment(existingAppointment.event_id, date, selectedTime);
+      } else {
+        event = await googleCalendarService.createAppointment(
+          phoneNumber,
+          date,
+          selectedTime,
+          intentData.treatment || 'General Checkup'
+        );
+      }
+
+      await databaseService.saveAppointment(
         phoneNumber,
-        date,
-        selectedTime,
-        intentData.treatment || 'General Checkup'
+        event.eventId,
+        intentData.treatment || 'General Checkup',
+        event.startTime
       );
 
       // Update state

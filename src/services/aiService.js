@@ -83,6 +83,24 @@ Context: ${JSON.stringify(context)}`;
 
         responseText = result.candidates[0].content.parts[0].text;
         return this.parseJSON(responseText);
+      } else if (this.aiProvider === 'openai') {
+        const openaiResponse = await axios.post('https://api.openai.com/v1/chat/completions', {
+          model: process.env.OPENAI_MODEL || 'gpt-3.5-turbo',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `USER MESSAGE: ${message}` },
+          ],
+          temperature: 0.1,
+          max_tokens: 200,
+        }, {
+          headers: {
+            Authorization: `Bearer ${this.openaiKey}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        responseText = openaiResponse.data.choices[0].message.content;
+        return this.parseJSON(responseText);
       }
     } catch (error) {
       console.error('Error extracting intent:', error);
