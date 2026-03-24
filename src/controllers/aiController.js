@@ -431,7 +431,7 @@ class AIController {
           if (!availableSlots || availableSlots.length === 0) {
             return {
               success: false,
-              error: `${targetDate} par koi slot available nahi hai. Dusri date try kariye.`,
+              error: `No available slots found for ${targetDate}. Please try another date.`,
             };
           }
 
@@ -449,18 +449,14 @@ class AIController {
             phoneNumber,
             intent: 'BOOK',
             date: targetDate,
-            slots: availableSlots.map((slot) => ({
-              id: slot.id,
-              time: slot.time12,
-              time24: slot.time24,
-            })),
-            message: `${targetDate} ke liye available slots:`,
+            slots: availableSlots,  // Keep original property names: id, time12, time24
+            message: `Available slots for ${targetDate}:`,
           };
         } catch (error) {
           console.error('Error fetching available slots:', error);
           return {
             success: false,
-            error: 'Slots fetch karte time error aaya. Please try again.',
+            error: 'Error fetching slots. Please try again.',
           };
         }
       }
@@ -470,7 +466,7 @@ class AIController {
         if (!recommendation) {
           return {
             success: false,
-            error: 'Requested time business hours ke bahar hai, aur next days me slot nahi mila.',
+            error: 'Requested time is outside office hours. No available slots found in the next 7 days.',
           };
         }
         await contextService.updateUserState(phoneNumber, 'AWAITING_CONFIRMATION', {
@@ -485,7 +481,7 @@ class AIController {
           phoneNumber,
           intent: 'BOOK',
           suggestedSlots: [recommendation.slot],
-          message: `Requested time business hours ke bahar hai. Next available slot ${recommendation.date} ${recommendation.slot.time12} hai. Confirm ke liye "ok" bhejiye.`,
+          message: `Requested time is outside office hours. Next available slot: ${recommendation.date} at ${recommendation.slot.time12}. Reply "ok" to confirm.`,
         };
       }
 
@@ -493,7 +489,7 @@ class AIController {
       if (!isAvailable) {
         return {
           success: false,
-          error: `Requested slot ${targetDate} ${selectedTime} already booked hai. Dusra exact time bhejiye.`,
+          error: `Requested slot ${targetDate} ${selectedTime} is already booked. Please choose another time.`,
         };
       }
 
@@ -511,13 +507,13 @@ class AIController {
             success: true,
             phoneNumber,
             intent: 'CONFIRM',
-            message: `Aapki booking already ${targetDate} ${googleCalendarService.convertTo12HourFormat(selectedTime)} par confirmed hai.`,
+            message: `Your booking is already confirmed for ${targetDate} at ${googleCalendarService.convertTo12HourFormat(selectedTime)}.`,
           };
         }
 
         return {
           success: false,
-          error: `Aapki ${targetDate} ki booking already ${existingTime} par hai. Change ke liye 'reschedule' message bhejiye.`,
+          error: `You already have a booking on ${targetDate} at ${existingTime}. Send 'reschedule' to modify it.`,
         };
       }
 
@@ -838,12 +834,8 @@ class AIController {
           phoneNumber,
           intent: 'BOOK',
           date: foundDate,
-          slots: foundSlots.map((slot) => ({
-            id: slot.id,
-            time: slot.time12,
-            time24: slot.time24,
-          })),
-          message: `Aaj ke liye slots available nahi hain. ${foundDate} ke liye available slots:`,
+          slots: foundSlots,  // Keep original property names: id, time12, time24
+          message: `No slots available today. Available slots for ${foundDate}:`,
         };
       }
 
@@ -860,12 +852,8 @@ class AIController {
         phoneNumber,
         intent: 'BOOK',
         date: today,
-        slots: slots.map((slot) => ({
-          id: slot.id,
-          time: slot.time12,
-          time24: slot.time24,
-        })),
-        message: `Aaj ke available slots:`,
+        slots: slots,  // Keep original property names: id, time12, time24
+        message: `Available slots for today (${today}):`,
       };
     } catch (error) {
       console.error('Error in manual booking:', error);

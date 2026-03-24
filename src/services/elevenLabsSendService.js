@@ -234,7 +234,7 @@ class ElevenLabsSendService {
    * @param {string} language - Response language
    * @returns {Promise<Object>} 11za API response
    */
-  async sendSlotOptions(phoneNumber, slots, language = 'hinglish') {
+  async sendSlotOptions(phoneNumber, slots, language = 'en') {
     try {
       // Format slots as numbered options
       const slotMessages = slots.map((slot, idx) => `${idx + 1}. ${slot.time12}`).join('\n');

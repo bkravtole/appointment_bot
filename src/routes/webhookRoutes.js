@@ -130,7 +130,7 @@ router.post('/user-action', async (req, res) => {
           whatsappDelivery = await elevenLabsSendService.sendSlotOptions(
             phoneNumber,
             slotsToSend,
-            'hinglish'
+            'en'  // Use English by default
           );
           alreadySent = whatsappDelivery.success;
         } 
