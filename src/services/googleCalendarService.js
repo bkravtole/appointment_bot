@@ -131,6 +131,29 @@ class GoogleCalendarService {
   }
 
   /**
+   * Validate requested time falls within configured office hours.
+   * @param {string} time - Time in HH:MM format
+   * @returns {boolean}
+   */
+  isWithinOfficeHours(time) {
+    const OFFICE_START = parseInt(process.env.OFFICE_HOURS_START) || 10;
+    const OFFICE_END = parseInt(process.env.OFFICE_HOURS_END) || 18;
+    const SLOT_DURATION = parseInt(process.env.APPOINTMENT_SLOT_DURATION) || 30;
+
+    const [hourStr, minuteStr] = time.split(':');
+    const hour = parseInt(hourStr, 10);
+    const minute = parseInt(minuteStr, 10);
+    if (Number.isNaN(hour) || Number.isNaN(minute)) return false;
+
+    const requestedMinutes = (hour * 60) + minute;
+    const startMinutes = OFFICE_START * 60;
+    const endMinutes = OFFICE_END * 60;
+
+    // Start must be inside [office_start, office_end - slot_duration].
+    return requestedMinutes >= startMinutes && (requestedMinutes + SLOT_DURATION) <= endMinutes;
+  }
+
+  /**
    * Calculate available 30-minute slots for a given date
    * @param {string} date - Date in YYYY-MM-DD format
    * @returns {Promise<Array>} Array of available time slots
@@ -223,6 +246,10 @@ class GoogleCalendarService {
 
   async createAppointment(phoneNumber, date, time, userName) {
     try {
+      if (!this.isWithinOfficeHours(time)) {
+        throw new Error(`Time slot ${time} is outside configured office hours`);
+      }
+
       const isFree = await this.isSlotAvailable(date, time);
       if (!isFree) {
         throw new Error(`Time slot ${date} ${time} is already booked`);
@@ -363,6 +390,10 @@ class GoogleCalendarService {
    */
   async updateAppointment(eventId, date, time) {
     try {
+      if (!this.isWithinOfficeHours(time)) {
+        throw new Error(`Time slot ${time} is outside configured office hours`);
+      }
+
       const isFree = await this.isSlotAvailable(date, time, eventId);
       if (!isFree) {
         throw new Error(`Time slot ${date} ${time} is already booked`);

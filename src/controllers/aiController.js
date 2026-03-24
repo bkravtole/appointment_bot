@@ -93,14 +93,34 @@ class AIController {
 
     const text = (message || '').toLowerCase();
     const hour = parseInt(base.split(':')[0], 10);
+    const minute = base.split(':')[1];
+    const officeStart = parseInt(process.env.OFFICE_HOURS_START) || 10;
+    const officeEnd = parseInt(process.env.OFFICE_HOURS_END) || 18;
 
     // Hindi/Hinglish context for evening requests like "5 baje sham ko".
     if ((/\bevening\b|\bshaam\b|\bsham\b|\braat\b|\bnight\b|\bpm\b/.test(text)) && hour < 12) {
       const adjusted = hour === 12 ? 12 : hour + 12;
-      return `${String(adjusted).padStart(2, '0')}:${base.split(':')[1]}`;
+      return `${String(adjusted).padStart(2, '0')}:${minute}`;
+    }
+
+    // If AM/PM is missing and parsed hour is outside clinic window, try PM variant.
+    if (!/\b(am|pm)\b/i.test(rawTimeText) && hour < officeStart) {
+      const pmHour = hour === 12 ? 12 : hour + 12;
+      if (pmHour < officeEnd) {
+        return `${String(pmHour).padStart(2, '0')}:${minute}`;
+      }
     }
 
     return base;
+  }
+
+  extractTreatmentFromMessage(message) {
+    if (!message || typeof message !== 'string') return null;
+    const text = message.trim();
+    const forPattern = /(?:for|ke liye|ki liye)\s+([a-zA-Z\s]{3,40})/i;
+    const match = text.match(forPattern);
+    if (!match) return null;
+    return match[1].trim();
   }
 
   extractRequestedTimeFromMessage(message) {
@@ -255,6 +275,7 @@ class AIController {
         };
       }
 
+      const treatmentName = intentData.treatment || this.extractTreatmentFromMessage(userMessage) || 'General Checkup';
       const existingAppointment = await databaseService.getAppointmentByPhone(phoneNumber);
       const sameDateExisting = existingAppointment?.appointment_time
         ? existingAppointment.appointment_time.startsWith(`${targetDate}T`)
@@ -268,14 +289,14 @@ class AIController {
           phoneNumber,
           targetDate,
           selectedTime,
-          intentData.treatment || 'General Checkup'
+          treatmentName
         );
       }
 
       await databaseService.saveAppointment(
         phoneNumber,
         event.eventId,
-        intentData.treatment || 'General Checkup',
+        treatmentName,
         event.startTime
       );
 
@@ -283,7 +304,7 @@ class AIController {
         appointmentId: event.eventId,
         date: targetDate,
         time: selectedTime,
-        treatment: intentData.treatment,
+        treatment: treatmentName,
       });
 
       return {
